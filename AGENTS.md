@@ -1,19 +1,34 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-The solution `HealthHelper.slnx` loads the MAUI app in `HealthHelper/`, with shared defaults in `HealthHelper.ServiceDefaults/`. Within the app, domain data resides under `Data/` and `Models/`, UI logic in `PageModels/`, and XAML pages plus controls in `Pages/` and `Pages/Controls/`. Cross-platform assets live in `Resources/` (`AppIcon/`, `Fonts/`, `Styles/`, etc.), platform heads are in `Platforms/`, and reusable helpers belong in `Utilities/`. Register new services or configuration extensions through `MauiProgram.cs` to keep dependency injection centralized.
+- `HealthHelper.slnx` coordinates the MAUI app in `HealthHelper/` and shared defaults in `HealthHelper.ServiceDefaults/`.
+- Domain entities live under `Data/` and `Models/`; presentation logic sits in `PageModels/`; XAML pages and controls reside in `Pages/` and `Pages/Controls/`.
+- Cross-platform assets (icons, fonts, styles) are in `Resources/`; platform-specific heads stay within `Platforms/`.
+- Reusable helpers belong in `Utilities/`, and new services should be registered centrally through `MauiProgram.cs`.
 
 ## Build, Test, and Development Commands
-Run `dotnet restore HealthHelper.slnx` before building. Use `dotnet build HealthHelper.slnx` for a CI-equivalent compile, and `dotnet build HealthHelper/HealthHelper.csproj -t:Run` to launch the MAUI app on the default target. `dotnet maui-check` validates local tooling once per workstation. As test projects spin up, execute `dotnet test` from the repo root so CI remains portable across platforms.
+- `dotnet restore HealthHelper.slnx` pulls all NuGet dependencies prior to any build.
+- `dotnet build HealthHelper.slnx` validates the full solution as CI would.
+- `dotnet build HealthHelper/HealthHelper.csproj -t:Run` launches the MAUI app on the default target.
+- `dotnet test` (run from the repo root) executes all test projects as they are added.
+- `dotnet maui-check` is a one-time tooling sanity check per developer machine.
 
 ## Coding Style & Naming Conventions
-Apply standard .NET style: 4-space indentation, PascalCase for types and public members, camelCase for locals and private fields (prefix with `_` only for property backing). Pair each page (`FooPage.xaml`) with a matching `FooPageModel.cs`, and keep file-scoped namespaces (`namespace ...;`) consistent. Run `dotnet format` prior to PRs to enforce analyzers and nullable warnings.
-
-## AI Configuration & Security
-Users bring their own LLM keys; persist secrets with `SecureStorage` or platform keystores, never plain text files. Keep inference strictly on-device—opt out of telemetry, and document any third-party SDK capabilities before inclusion. When introducing caching or logs, redact prompts and health data by default and guard debugging utilities behind compilation symbols.
+- Follow standard .NET conventions: 4-space indentation, PascalCase for types and public members, camelCase for locals and private fields (use `_` prefixes only for property backing fields).
+- Match each page (`FooPage.xaml`) with `FooPageModel.cs`, keeping file-scoped namespaces aligned with directory structure.
+- Run `dotnet format` before publishing changes to satisfy analyzers and nullable warnings.
 
 ## Testing Guidelines
-Add unit tests under a future `HealthHelper.Tests/` project mirroring production namespaces. Name test classes `<TypeUnderTest>Tests` and use descriptive test method names (e.g., `GeneratePlan_SortsTasksByUrgency`). Mock AI clients so tests run deterministically without external calls, and ensure `dotnet test` passes without platform-specific switches.
+- Place unit tests in the future `HealthHelper.Tests/` project, mirroring production namespaces.
+- Name test classes `<TypeUnderTest>Tests` and methods with scenario-driven verbs (e.g., `GeneratePlan_SortsTasksByUrgency`).
+- Mock AI integrations so `dotnet test` remains deterministic and offline-friendly.
+
+## Security & Configuration
+- Store user-provided LLM keys with `SecureStorage` or platform keystores—never in plaintext files.
+- Keep inference and prompting on-device, opt out of telemetry, and document any third-party SDK data handling.
+- When adding caching or logs, redact prompts and health data by default and guard debugging hooks behind compilation symbols.
 
 ## Commit & Pull Request Guidelines
-Commits follow short, imperative subjects (e.g., “Remove aspire”). Keep diffs scoped, add body context when touching multiple layers, and note security implications of new AI or storage code. For PRs, supply a summary, linked issue, screenshots or recordings for UI changes, manual test notes per platform, and explicit mention of how sensitive data is safeguarded.
+- Write commits with short, imperative subjects (e.g., “Remove aspire”) and include context when touching multiple layers.
+- Scope diffs narrowly and call out security implications of storage or AI changes in commit bodies or PR notes.
+- For PRs, provide a summary, linked issue, UI screenshots or recordings if applicable, per-platform manual test notes, and clarity on how sensitive data stays protected.

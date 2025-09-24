@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
@@ -25,7 +25,7 @@
 		<ApplicationTitle>HealthHelper</ApplicationTitle>
 
 		<!-- App Identifier -->
-		<ApplicationId>com.companyname.healthhelper</ApplicationId>
+		<ApplicationId>com.digitumdei.healthhelper</ApplicationId>
 
 		<!-- Versions -->
 		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
@@ -39,6 +39,23 @@
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
 		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+		<AndroidSigningKeyStore>healthhelper.keystore</AndroidSigningKeyStore>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net10.0-android|AnyCPU'">
+	  <AndroidPackageFormat>apk</AndroidPackageFormat>
+	  <AndroidKeyStore>True</AndroidKeyStore>
+	  <AndroidSigningStorePass>8vzq4m42&amp;wzNu</AndroidSigningStorePass>
+	  <AndroidSigningKeyAlias>healthhelper</AndroidSigningKeyAlias>
+	  <AndroidSigningKeyPass>8vzq4m42&amp;wzNu</AndroidSigningKeyPass>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net10.0-android|AnyCPU'">
+	  <EmbedAssembliesIntoApk>True</EmbedAssembliesIntoApk>
+	  <AndroidKeyStore>True</AndroidKeyStore>
+	  <AndroidSigningStorePass>8vzq4m42&amp;wzNu</AndroidSigningStorePass>
+	  <AndroidSigningKeyAlias>healthhelper</AndroidSigningKeyAlias>
+	  <AndroidSigningKeyPass>8vzq4m42&amp;wzNu</AndroidSigningKeyPass>
 	</PropertyGroup>
 
 	<ItemGroup>
