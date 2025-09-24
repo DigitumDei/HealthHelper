@@ -33,7 +33,7 @@
                                 Margin="0,0,0,16"
                                 StrokeShape="RoundRectangle 12,12,12,12">
                             <Grid RowDefinitions="Auto,Auto">
-                                <Image Source="{Binding FilePath}"
+                                <Image Source="{Binding FullPath}"
                                        Aspect="AspectFill"
                                        HeightRequest="220"
                                        SemanticProperties.Description="Meal photo" />

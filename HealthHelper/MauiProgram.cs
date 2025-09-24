@@ -1,3 +1,6 @@
+using HealthHelper.Data;
+using HealthHelper.PageModels;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace HealthHelper;
@@ -19,11 +22,27 @@ public static class MauiProgram
 
 #if DEBUG
         builder.Logging.AddDebug();
-        builder.Services.AddLogging(configure => configure.AddDebug());
 #endif
 
-        builder.Services.AddSingleton<MealLogViewModel>();
+        string dbPath = Path.Combine(FileSystem.AppDataDirectory, "healthhelper.db3");
+        builder.Services.AddDbContext<HealthHelperDbContext>(options => options.UseSqlite($"Filename={dbPath}"));
 
-        return builder.Build();
+        builder.Services.AddScoped<ITrackedEntryRepository, SqliteTrackedEntryRepository>();
+        builder.Services.AddScoped<IEntryAnalysisRepository, SqliteEntryAnalysisRepository>();
+        builder.Services.AddScoped<IDailySummaryRepository, SqliteDailySummaryRepository>();
+
+        builder.Services.AddTransient<MealLogViewModel>();
+        builder.Services.AddTransient<MainPage>();
+
+        var app = builder.Build();
+
+        // Run migrations
+        using (var scope = app.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<HealthHelperDbContext>();
+            dbContext.Database.Migrate();
+        }
+
+        return app;
     }
 }

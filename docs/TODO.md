@@ -5,18 +5,18 @@
     - [x] Add the button to the main page UI.
     - [x] Implement the `Clicked` event handler to capture a photo using the device's camera.
     - [x] Ensure all necessary permissions are correctly configured for both Android and iOS to allow camera and storage access.
-- [ ] Save captured photos into persistent storage:
-  - [ ] Determine permanent storage location in `FileSystem.AppDataDirectory`.
-  - [ ] Generate a unique filename (e.g., using a GUID) for each photo.
-  - [ ] Implement logic to copy the photo from the temporary `MediaPicker` location to the permanent path.
-  - [ ] Create a `TrackedEntry` model in memory with the correct `BlobPath` and metadata.
-- [ ] Implement SQLite persistence layer:
-  - [ ] Add EF Core SQLite NuGet packages to the project.
-  - [ ] Define `HealthHelperDbContext` with `DbSet`s for `TrackedEntry`, `EntryAnalysis`, and `DailySummary`.
-  - [ ] Configure entity relationships and payload serialization in `OnModelCreating`.
-  - [ ] Implement the `ITrackedEntryRepository`, `IEntryAnalysisRepository`, and `IDailySummaryRepository` interfaces.
-  - [ ] Set up automatic database creation/migration on app startup.
-  - [ ] Register the `DbContext` and repositories for dependency injection.
+- [x] Save captured photos into persistent storage:
+  - [x] Determine permanent storage location in `FileSystem.AppDataDirectory`.
+  - [x] Generate a unique filename (e.g., using a GUID) for each photo.
+  - [x] Implement logic to copy the photo from the temporary `MediaPicker` location to the permanent path.
+  - [x] Create a `TrackedEntry` model in memory with the correct `BlobPath` and metadata.
+- [x] Implement SQLite persistence layer:
+  - [x] Add EF Core SQLite NuGet packages to the project.
+  - [x] Define `HealthHelperDbContext` with `DbSet`s for `TrackedEntry`, `EntryAnalysis`, and `DailySummary`.
+  - [x] Configure entity relationships and payload serialization in `OnModelCreating`.
+  - [x] Implement the `ITrackedEntryRepository`, `IEntryAnalysisRepository`, and `IDailySummaryRepository` interfaces.
+  - [x] Set up automatic database creation/migration on app startup.
+  - [x] Register the `DbContext` and repositories for dependency injection.
 - [ ] Define the LLM provider interface and deliver an initial OpenAI adapter.
 - [ ] Persist LLM responses into the new analysis tables via the orchestration pipeline.
 - [ ] Generate daily summaries from stored analyses and surface them in the UI.
