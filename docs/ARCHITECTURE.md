@@ -63,7 +63,7 @@ classDiagram
     }
     class ILLmClient {
         <<interface>>
-        +InvokeAsync(prompt)
+        +InvokeAnalysisAsync(TrackedEntry, LlmRequestContext) : LlmAnalysisResult
     }
     class IEntryAnalysisRepository {
         <<interface>>
@@ -109,7 +109,7 @@ HealthHelper is a cross-platform .NET MAUI app that captures wellbeing signals (
 
 ## LLM Processing Pipeline
 - **Trigger**: Persisted entries enqueue work items via `ILlmProcessingQueue`, encapsulating entry IDs and target models to centralise retries, batching, and cancellation.
-- **Provider Abstraction**: `ILLmClient` defines a uniform contract. Provider adapters (OpenAI, Azure OpenAI, LiteLLM proxy, self-hosted endpoints) implement it, backed by user-selected settings stored in `SecureStorage` or encrypted preferences.
+- **Provider Abstraction**: `ILLmClient` exposes `InvokeAnalysisAsync(TrackedEntry entry, LlmRequestContext context)` and returns an `LlmAnalysisResult` containing the persisted `EntryAnalysis` plus provider diagnostics (token usage, rate data). Provider adapters (OpenAI, Azure OpenAI, LiteLLM proxy, self-hosted endpoints) implement it, backed by user-selected settings stored in `SecureStorage` or encrypted preferences.
 - **Prompt Construction**: Build prompts from entry metadata and down-sampled assets. Include entry type context so generic models interpret inputs correctly.
 - **Invocation & Resilience**: Execute network calls via the chosen adapter, handling rate limits and translating provider-specific faults into domain errors. Processing happens off-device per the user’s trusted endpoint.
 - **Storage**: Persist results as `EntryAnalysis` records keyed by an auto-incrementing integer `Id`. Each record stores `EntryId` (foreign key to `TrackedEntry`), `EntryType`, `ProviderId`, `Model`, `CapturedAt`, `InsightsJson`, `Confidence`, and optional `ExternalId` / `RawResponseHash` values for cross-device or integrity needs. Guard raw payload logging behind compile-time flags.

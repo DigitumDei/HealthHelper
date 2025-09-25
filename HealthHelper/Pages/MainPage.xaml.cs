@@ -10,17 +10,17 @@ public partial class MainPage : ContentPage
     {
         InitializeComponent();
         BindingContext = viewModel;
-        		_trackedEntryRepository = trackedEntryRepository;
-        	}
-        
-        	protected override async void OnAppearing()
-        	{
-        		base.OnAppearing();
-        		if (BindingContext is MealLogViewModel vm)
-        		{
-        			await vm.LoadEntriesAsync();
-        		}
-        	}
+        _trackedEntryRepository = trackedEntryRepository;
+    }
+
+    protected override async void OnAppearing()
+    {
+        base.OnAppearing();
+        if (BindingContext is MealLogViewModel vm)
+        {
+            await vm.LoadEntriesAsync();
+        }
+    }
     private async void TakePhotoButton_Clicked(object sender, EventArgs e)
     {
         try
