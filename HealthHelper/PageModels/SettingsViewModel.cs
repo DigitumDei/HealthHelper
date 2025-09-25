@@ -1,6 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Fonts;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using System.Collections.ObjectModel;
@@ -48,14 +47,14 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(ApiKey))
         {
-            await Shell.Current.DisplayAlert("Error", "API Key cannot be empty.", "OK");
+            await Shell.Current.DisplayAlertAsync("Error", "API Key cannot be empty.", "OK");
             return;
         }
 
         _appSettings.SelectedProvider = SelectedProvider;
 
         await _appSettingsRepository.SaveAppSettingsAsync(_appSettings);
-        await Shell.Current.DisplayAlert("Success", "Settings saved.", "OK");
+        await Shell.Current.DisplayAlertAsync("Success", "Settings saved.", "OK");
     }
 
     [RelayCommand]

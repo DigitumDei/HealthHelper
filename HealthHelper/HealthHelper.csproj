@@ -57,7 +57,9 @@
 	  <AndroidSigningKeyAlias>healthhelper</AndroidSigningKeyAlias>
 	  <AndroidSigningKeyPass>8vzq4m42&amp;wzNu</AndroidSigningKeyPass>
 	</PropertyGroup>
-
+	<PropertyGroup>
+		<CsWinRTAotOptimizerEnabled>false</CsWinRTAotOptimizerEnabled>
+	</PropertyGroup>
 	<ItemGroup>
 		<!-- App Icon -->
 		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#17171a" />
@@ -88,6 +90,8 @@
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.9" />
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0-rc.1.25451.107" />
+		<PackageReference Include="OpenAI" Version="2.5.0" />
+		<PackageReference Include="System.Net.Http.Json" Version="9.0.9" />
 	</ItemGroup>
 
 </Project>
