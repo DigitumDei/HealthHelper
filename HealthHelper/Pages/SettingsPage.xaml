@@ -1,0 +1,41 @@
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:HealthHelper.Models"
+             xmlns:viewmodels="clr-namespace:HealthHelper.PageModels"
+             xmlns:f="clr-namespace:Fonts;assembly=HealthHelper"
+             x:Class="HealthHelper.Pages.SettingsPage"
+             x:DataType="viewmodels:SettingsViewModel"
+             Title="Settings">
+    <VerticalStackLayout Spacing="20" Padding="20">
+        <Label Text="LLM Provider" />
+        <Picker ItemsSource="{Binding Providers}" 
+                SelectedItem="{Binding SelectedProvider}" />
+
+        <Label Text="API Key" />
+        <Grid ColumnDefinitions="*,40" VerticalOptions="Center">
+            <Entry
+                Grid.Column="0"
+                Text="{Binding ApiKey}"
+                IsPassword="{Binding IsApiKeyMasked}"
+                Placeholder="Paste your provider key"
+                VerticalOptions="Center" />
+            <ImageButton
+                Grid.Column="1"
+                Command="{Binding ToggleApiKeyVisibilityCommand}"
+                BackgroundColor="Transparent"
+                WidthRequest="40"
+                HeightRequest="40"
+                Padding="6"
+                SemanticProperties.Description="Toggle API key visibility">
+                <ImageButton.Source>
+                    <FontImageSource
+                        Glyph="{Binding ToggleIconGlyph}"
+                        FontFamily="{x:Static f:FluentUI.FontFamily}"
+                        Color="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}" />
+                </ImageButton.Source>
+            </ImageButton>
+        </Grid>
+
+        <Button Text="Save" Command="{Binding SaveSettingsCommand}" />
+    </VerticalStackLayout>
+</ContentPage>

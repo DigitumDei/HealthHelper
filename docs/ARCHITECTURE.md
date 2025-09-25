@@ -125,7 +125,7 @@ HealthHelper is a cross-platform .NET MAUI app that captures wellbeing signals (
   - `ITrackedEntryRepository` manages polymorphic entry metadata and associated blobs, persisting each entry with an `INTEGER PRIMARY KEY`, optional external GUID for sync, and JSON payload columns.
   - `IEntryAnalysisRepository` handles LLM outputs keyed by integer IDs with foreign keys to entries (and optional external GUIDs when required).
   - `IDailySummaryRepository` materialises summaries and their linked analyses (via the junction table) using integer keys for core relations.
-  - `IProviderSettingsRepository` persists provider configuration and credentials.
+  - `IAppSettingsRepository` persists provider configuration and credentials.
 - Repositories should map domain models to DTOs internally, leveraging SQLite's implicit `rowid` via `INTEGER PRIMARY KEY` columns for performance while versioning payload schemas to avoid drift. Resolve repositories through DI scopes so each user interaction receives a shared `DbContext`/connection, enabling atomic transactions across multiple repositories.
 - Coordinating services (e.g., `EntryLoggingService`, `AnalysisOrchestrator`, `SummaryService`) encapsulate workflows so UI code remains thin.
 

@@ -4,13 +4,20 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:pages="clr-namespace:HealthHelper.Pages"
-    Title="HealthHelper"
-    Shell.FlyoutBehavior="Disabled">
+    Title="HealthHelper">
 
-    <ShellContent
-        Title="Diet Tracker"
-        Icon="{StaticResource IconCamera}"
-        ContentTemplate="{DataTemplate pages:MainPage}"
-        Route="main" />
+    <FlyoutItem Title="Diet Tracker">
+        <ShellContent
+            Icon="{StaticResource IconCamera}"
+            ContentTemplate="{DataTemplate pages:MainPage}"
+            Route="main" />
+    </FlyoutItem>
+
+    <FlyoutItem Title="Settings">
+        <ShellContent
+            Icon="{StaticResource IconSettings}"
+            ContentTemplate="{DataTemplate pages:SettingsPage}"
+            Route="settings" />
+    </FlyoutItem>
 
 </Shell>

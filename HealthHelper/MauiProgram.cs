@@ -1,5 +1,5 @@
+using CommunityToolkit.Maui;
 using HealthHelper.Data;
-using HealthHelper.PageModels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +12,7 @@ public static class MauiProgram
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
+            .UseMauiCommunityToolkit()
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
@@ -31,8 +32,14 @@ public static class MauiProgram
         builder.Services.AddScoped<IEntryAnalysisRepository, SqliteEntryAnalysisRepository>();
         builder.Services.AddScoped<IDailySummaryRepository, SqliteDailySummaryRepository>();
 
+        builder.Services.AddSingleton<IAppSettingsRepository, SecureStorageAppSettingsRepository>();
+
+
         builder.Services.AddTransient<MealLogViewModel>();
         builder.Services.AddTransient<MainPage>();
+
+        builder.Services.AddTransient<SettingsViewModel>();
+        builder.Services.AddTransient<SettingsPage>();
 
         var app = builder.Build();
 

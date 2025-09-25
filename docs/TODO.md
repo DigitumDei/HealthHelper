@@ -17,6 +17,16 @@
   - [x] Implement the `ITrackedEntryRepository`, `IEntryAnalysisRepository`, and `IDailySummaryRepository` interfaces.
   - [x] Set up automatic database creation/migration on app startup.
   - [x] Register the `DbContext` and repositories for dependency injection.
-- [ ] Define the LLM provider interface and deliver an initial OpenAI adapter.
+- [x] Deliver LLM provider configuration UX and storage:
+  - [x] Introduce an `AppSettings` aggregate + `IAppSettingsRepository` that persists encrypted credentials via `SecureStorage`, matching the Security guidelines in `docs/ARCHITECTURE.md`.
+  - [x] Add a settings page/page model pairing for provider selection and API key capture, wiring it to validation commands and secure storage updates.
+  - [ ] Gate `AnalysisOrchestrator` execution until valid provider credentials exist, surfacing inline errors and retry affordances in the UI. (NOTE: `AnalysisOrchestrator` not yet implemented)
+  - [x] Expose provider/model preferences through DI (e.g., `MauiProgram`) so other services can resolve the active configuration without reading secrets directly.
+- [ ] Define the LLM provider interface and deliver an initial OpenAI adapter:
+  - [ ] Formalise the `ILLmClient` abstraction referenced in `docs/ARCHITECTURE.md`, exposing `InvokeAnalysisAsync(TrackedEntry entry, LlmRequestContext context)` and structured result/diagnostic types so orchestrators can persist `EntryAnalysis` rows without parsing raw strings.
+  - [ ] Capture provider metadata (`ProviderId`, `Model`, rate-limit policy) alongside responses, ensuring `EntryAnalysis` persistence remains aligned with the ERD (`docs/ARCHITECTURE.md`).
+  - [ ] Implement an `OpenAiLlmClient` under `Utilities/Services/Llm/` that reads API keys from secure storage, maps internal requests to OpenAI REST calls, and normalises error handling into the interface contracts.
+  - [ ] Register the interface and OpenAI implementation via `MauiProgram.ConfigureServices` so `AnalysisOrchestrator` receives the correct instance through dependency injection.
+  - [ ] Add configuration scaffolding (DTO + repository or options) for selecting provider/model at runtime while keeping raw credentials encrypted per the Security & Configuration guidelines.
 - [ ] Persist LLM responses into the new analysis tables via the orchestration pipeline.
 - [ ] Generate daily summaries from stored analyses and surface them in the UI.
