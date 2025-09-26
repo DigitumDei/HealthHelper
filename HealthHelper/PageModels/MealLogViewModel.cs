@@ -1,10 +1,13 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using HealthHelper.Data;
 using HealthHelper.Models;
+using HealthHelper.Pages;
 
 namespace HealthHelper.PageModels;
 
-public class MealLogViewModel
+public partial class MealLogViewModel : ObservableObject
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     public ObservableCollection<MealPhoto> Meals { get; } = new();
@@ -12,6 +15,18 @@ public class MealLogViewModel
     public MealLogViewModel(ITrackedEntryRepository trackedEntryRepository)
     {
         _trackedEntryRepository = trackedEntryRepository;
+    }
+
+    [RelayCommand]
+    private async Task GoToMealDetail(MealPhoto meal)
+    {
+        if (meal is null) return;
+
+        await Shell.Current.GoToAsync(nameof(MealDetailPage),
+            new Dictionary<string, object>
+            {
+                { "Meal", meal }
+            });
     }
 
     public async Task LoadEntriesAsync()

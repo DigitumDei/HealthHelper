@@ -1,5 +1,6 @@
 using CommunityToolkit.Maui;
 using HealthHelper.Data;
+using HealthHelper.Services.Analysis;
 using HealthHelper.Services.Llm;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -42,6 +43,10 @@ public static class MauiProgram
         builder.Services.AddTransient<SettingsViewModel>();
         builder.Services.AddTransient<SettingsPage>();
 
+        builder.Services.AddTransient<MealDetailViewModel>();
+        builder.Services.AddTransient<MealDetailPage>();
+
+        builder.Services.AddTransient<IAnalysisOrchestrator, AnalysisOrchestrator>();
         builder.Services.AddTransient<ILLmClient, OpenAiLlmClient>();
 
         var app = builder.Build();

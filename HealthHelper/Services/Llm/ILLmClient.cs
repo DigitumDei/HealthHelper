@@ -11,6 +11,8 @@ public interface ILLmClient
 public class LlmRequestContext
 {
     public string ModelId { get; set; } = string.Empty;
+    public LlmProvider Provider { get; set; }
+    public string ApiKey { get; set; } = string.Empty;
 }
 
 public class LlmAnalysisResult

@@ -18,7 +18,10 @@
                     SemanticProperties.Description="Capture a meal photo"
                     Clicked="TakePhotoButton_Clicked" />
 
-            <CollectionView ItemsSource="{Binding Meals}" Margin="0,8,0,0">
+            <CollectionView ItemsSource="{Binding Meals}"
+                            Margin="0,8,0,0"
+                            SelectionMode="Single"
+                            SelectionChanged="MealsCollection_SelectionChanged">
                 <CollectionView.EmptyView>
                     <VerticalStackLayout Padding="32" Spacing="12" HorizontalOptions="Center" VerticalOptions="Center">
                         <Label Text="No meals tracked yet." HorizontalTextAlignment="Center" Style="{StaticResource Body1}" />
@@ -31,8 +34,10 @@
                                 Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                                 Padding="0"
                                 Margin="0,0,0,16"
+                                BackgroundColor="Transparent"
                                 StrokeShape="RoundRectangle 12,12,12,12">
-                            <Grid RowDefinitions="Auto,Auto">
+
+                            <Grid RowDefinitions="Auto,Auto" BackgroundColor="Transparent">
                                 <Image Source="{Binding FullPath}"
                                        Aspect="AspectFill"
                                        HeightRequest="220"

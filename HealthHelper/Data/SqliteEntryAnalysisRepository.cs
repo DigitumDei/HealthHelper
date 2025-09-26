@@ -25,4 +25,10 @@ public class SqliteEntryAnalysisRepository : IEntryAnalysisRepository
             .Where(a => a.CapturedAt.Date == date.Date)
             .ToListAsync();
     }
+
+    public async Task<EntryAnalysis?> GetByTrackedEntryIdAsync(int trackedEntryId)
+    {
+        return await _context.EntryAnalyses
+            .FirstOrDefaultAsync(a => a.EntryId == trackedEntryId);
+    }
 }

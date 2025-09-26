@@ -35,7 +35,16 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
                 entry.Payload = JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload();
             }
         }
-
         return entries;
+    }
+
+    public async Task DeleteAsync(int entryId)
+    {
+        var entry = await _context.TrackedEntries.FindAsync(entryId);
+        if (entry is not null)
+        {
+            _context.TrackedEntries.Remove(entry);
+            await _context.SaveChangesAsync();
+        }
     }
 }

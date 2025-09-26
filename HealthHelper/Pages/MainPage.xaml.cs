@@ -1,16 +1,26 @@
-﻿using HealthHelper.Data;
+﻿using System.Linq;
+using System.Threading.Tasks;
+using HealthHelper.Data;
+using HealthHelper.Models;
+using HealthHelper.PageModels;
+using HealthHelper.Services.Analysis;
 
 namespace HealthHelper.Pages;
 
 public partial class MainPage : ContentPage
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
+    private readonly IAnalysisOrchestrator _analysisOrchestrator;
 
-    public MainPage(MealLogViewModel viewModel, ITrackedEntryRepository trackedEntryRepository)
+    public MainPage(
+        MealLogViewModel viewModel,
+        ITrackedEntryRepository trackedEntryRepository,
+        IAnalysisOrchestrator analysisOrchestrator)
     {
         InitializeComponent();
         BindingContext = viewModel;
         _trackedEntryRepository = trackedEntryRepository;
+        _analysisOrchestrator = analysisOrchestrator;
     }
 
     protected override async void OnAppearing()
@@ -21,6 +31,7 @@ public partial class MainPage : ContentPage
             await vm.LoadEntriesAsync();
         }
     }
+
     private async void TakePhotoButton_Clicked(object sender, EventArgs e)
     {
         try
@@ -67,6 +78,23 @@ public partial class MainPage : ContentPage
 
             await _trackedEntryRepository.AddAsync(newEntry);
 
+            var analysisResult = await Task.Run(() => _analysisOrchestrator.ProcessEntryAsync(newEntry));
+            if (!analysisResult.IsQueued && !string.IsNullOrWhiteSpace(analysisResult.UserMessage))
+            {
+                if (analysisResult.RequiresCredentials)
+                {
+                    bool openSettings = await DisplayAlertAsync("Connect LLM", analysisResult.UserMessage, "Open Settings", "Dismiss");
+                    if (openSettings)
+                    {
+                        await Shell.Current.GoToAsync(nameof(SettingsPage));
+                    }
+                }
+                else
+                {
+                    await DisplayAlertAsync("Analysis", analysisResult.UserMessage, "OK");
+                }
+            }
+
             if (BindingContext is MealLogViewModel vm)
             {
                 await vm.LoadEntriesAsync();
@@ -75,6 +103,26 @@ public partial class MainPage : ContentPage
         catch (Exception ex)
         {
             await DisplayAlertAsync("Error", $"An error occurred: {ex.Message}", "OK");
+        }
+    }
+
+    private async void MealsCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (BindingContext is not MealLogViewModel vm)
+        {
+            return;
+        }
+
+        if (e.CurrentSelection.FirstOrDefault() is not MealPhoto selectedMeal)
+        {
+            return;
+        }
+
+        await vm.GoToMealDetailCommand.ExecuteAsync(selectedMeal);
+
+        if (sender is CollectionView collectionView)
+        {
+            collectionView.SelectedItem = null;
         }
     }
 
