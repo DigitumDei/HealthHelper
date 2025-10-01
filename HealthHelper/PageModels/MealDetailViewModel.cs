@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -78,7 +81,7 @@ public partial class MealDetailViewModel : ObservableObject
             var analysis = await _entryAnalysisRepository.GetByTrackedEntryIdAsync(Meal.EntryId).ConfigureAwait(false);
             if (analysis is not null)
             {
-                AnalysisText = analysis.InsightsJson;
+                AnalysisText = FormatStructuredAnalysis(analysis);
             }
             else
             {
@@ -89,6 +92,118 @@ public partial class MealDetailViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to load analysis for entry {EntryId}.", Meal.EntryId);
             AnalysisText = "We couldn't load the analysis for this meal.";
+        }
+    }
+
+    private string FormatStructuredAnalysis(EntryAnalysis analysis)
+    {
+        try
+        {
+            var result = JsonSerializer.Deserialize<MealAnalysisResult>(analysis.InsightsJson);
+            if (result is null)
+            {
+                return analysis.InsightsJson;
+            }
+
+            var sb = new StringBuilder();
+
+            // Food Items
+            if (result.FoodItems?.Any() == true)
+            {
+                sb.AppendLine("🍽️ Food Items:");
+                foreach (var item in result.FoodItems)
+                {
+                    sb.Append($"  • {item.Name}");
+                    if (!string.IsNullOrEmpty(item.PortionSize))
+                    {
+                        sb.Append($" ({item.PortionSize})");
+                    }
+                    if (item.Calories.HasValue)
+                    {
+                        sb.Append($" - {item.Calories} cal");
+                    }
+                    sb.AppendLine();
+                }
+                sb.AppendLine();
+            }
+
+            // Nutrition
+            if (result.Nutrition is not null)
+            {
+                sb.AppendLine("📊 Nutrition:");
+                if (result.Nutrition.TotalCalories.HasValue)
+                {
+                    sb.AppendLine($"  Total Calories: {result.Nutrition.TotalCalories}");
+                }
+                if (result.Nutrition.Protein.HasValue)
+                {
+                    sb.AppendLine($"  Protein: {result.Nutrition.Protein:F1}g");
+                }
+                if (result.Nutrition.Carbohydrates.HasValue)
+                {
+                    sb.AppendLine($"  Carbs: {result.Nutrition.Carbohydrates:F1}g");
+                }
+                if (result.Nutrition.Fat.HasValue)
+                {
+                    sb.AppendLine($"  Fat: {result.Nutrition.Fat:F1}g");
+                }
+                if (result.Nutrition.Fiber.HasValue)
+                {
+                    sb.AppendLine($"  Fiber: {result.Nutrition.Fiber:F1}g");
+                }
+                sb.AppendLine();
+            }
+
+            // Health Insights
+            if (result.HealthInsights is not null)
+            {
+                sb.AppendLine("💚 Health Assessment:");
+                if (result.HealthInsights.HealthScore.HasValue)
+                {
+                    sb.AppendLine($"  Score: {result.HealthInsights.HealthScore:F1}/10");
+                }
+                if (!string.IsNullOrEmpty(result.HealthInsights.Summary))
+                {
+                    sb.AppendLine($"  {result.HealthInsights.Summary}");
+                }
+                sb.AppendLine();
+
+                if (result.HealthInsights.Positives?.Any() == true)
+                {
+                    sb.AppendLine("  ✅ Positives:");
+                    foreach (var positive in result.HealthInsights.Positives)
+                    {
+                        sb.AppendLine($"    • {positive}");
+                    }
+                    sb.AppendLine();
+                }
+
+                if (result.HealthInsights.Improvements?.Any() == true)
+                {
+                    sb.AppendLine("  ⚠️ Improvements:");
+                    foreach (var improvement in result.HealthInsights.Improvements)
+                    {
+                        sb.AppendLine($"    • {improvement}");
+                    }
+                    sb.AppendLine();
+                }
+
+                if (result.HealthInsights.Recommendations?.Any() == true)
+                {
+                    sb.AppendLine("  💡 Recommendations:");
+                    foreach (var recommendation in result.HealthInsights.Recommendations)
+                    {
+                        sb.AppendLine($"    • {recommendation}");
+                    }
+                }
+            }
+
+            return sb.ToString();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse structured analysis, showing raw JSON.");
+            return analysis.InsightsJson;
         }
     }
 }

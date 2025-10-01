@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HealthHelper.Data;
@@ -20,17 +21,20 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
     private readonly IAppSettingsRepository _appSettingsRepository;
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
     private readonly ILLmClient _llmClient;
+    private readonly MealAnalysisValidator _validator;
     private readonly ILogger<AnalysisOrchestrator> _logger;
 
     public AnalysisOrchestrator(
         IAppSettingsRepository appSettingsRepository,
         IEntryAnalysisRepository entryAnalysisRepository,
         ILLmClient llmClient,
+        MealAnalysisValidator validator,
         ILogger<AnalysisOrchestrator> logger)
     {
         _appSettingsRepository = appSettingsRepository;
         _entryAnalysisRepository = entryAnalysisRepository;
         _llmClient = llmClient;
+        _validator = validator;
         _logger = logger;
     }
 
@@ -76,6 +80,21 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
             {
                 _logger.LogWarning("LLM returned no analysis for entry {EntryId}.", entry.EntryId);
                 return AnalysisInvocationResult.NoAnalysis();
+            }
+
+            // Validate the structured response
+            var validationResult = _validator.Validate(llmResult.Analysis.InsightsJson, llmResult.Analysis.SchemaVersion);
+            if (!validationResult.IsValid)
+            {
+                _logger.LogError("Analysis validation failed for entry {EntryId}. Errors: {Errors}",
+                    entry.EntryId,
+                    string.Join("; ", validationResult.Errors));
+            }
+            else if (validationResult.Warnings.Any())
+            {
+                _logger.LogWarning("Analysis validation warnings for entry {EntryId}: {Warnings}",
+                    entry.EntryId,
+                    string.Join("; ", validationResult.Warnings));
             }
 
             llmResult.Analysis.EntryId = entry.EntryId;

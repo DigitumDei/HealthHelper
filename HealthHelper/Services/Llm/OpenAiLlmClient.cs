@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using HealthHelper.Models;
 using Microsoft.Extensions.Logging;
@@ -35,9 +36,31 @@ public class OpenAiLlmClient : ILLmClient
 
         try
         {
-            var response = await chatClient.CompleteChatAsync(messages);
+            var options = new ChatCompletionOptions
+            {
+                ResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
+                    jsonSchemaFormatName: "meal_analysis",
+                    jsonSchema: BinaryData.FromString(GetMealAnalysisSchema()),
+                    jsonSchemaIsStrict: true
+                )
+            };
+
+            var response = await chatClient.CompleteChatAsync(messages, options);
 
             var insights = ExtractTextContent(response.Value.Content);
+
+            // Validate and parse the structured response
+            MealAnalysisResult? parsedResult = null;
+            try
+            {
+                parsedResult = JsonSerializer.Deserialize<MealAnalysisResult>(insights);
+                _logger.LogInformation("Successfully parsed structured meal analysis with {FoodItemCount} food items.",
+                    parsedResult?.FoodItems?.Count ?? 0);
+            }
+            catch (JsonException jsonEx)
+            {
+                _logger.LogWarning(jsonEx, "Failed to parse structured response, storing raw JSON. Response: {Response}", insights);
+            }
 
             var analysis = new EntryAnalysis
             {
@@ -45,7 +68,8 @@ public class OpenAiLlmClient : ILLmClient
                 ProviderId = LlmProvider.OpenAI.ToString(),
                 Model = context.ModelId,
                 CapturedAt = DateTime.UtcNow,
-                InsightsJson = insights
+                InsightsJson = insights,
+                SchemaVersion = parsedResult?.SchemaVersion ?? "unknown"
             };
 
             var diagnostics = new LlmDiagnostics
@@ -70,9 +94,15 @@ public class OpenAiLlmClient : ILLmClient
 
     private static async Task<List<ChatMessage>> CreateChatRequest(TrackedEntry entry)
     {
+        var systemPrompt = @"You are a helpful assistant that analyzes meal photos.
+Identify all food items, estimate portion sizes, and provide nutritional information.
+Give an overall health assessment with specific recommendations.
+Be accurate but acknowledge uncertainty when applicable.
+Return your analysis in the structured JSON format specified.";
+
         var messages = new List<ChatMessage>
         {
-            new SystemChatMessage("You are a helpful assistant that analyzes meal photos. Provide a nutritional estimate and identify the food items."),
+            new SystemChatMessage(systemPrompt),
         };
 
         var userMessageContent = new List<ChatMessageContentPart>
@@ -127,5 +157,133 @@ public class OpenAiLlmClient : ILLmClient
         }
 
         return builder.ToString();
+    }
+
+    private static string GetMealAnalysisSchema()
+    {
+        return """
+        {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "string",
+              "description": "Schema version, always '1.0'"
+            },
+            "foodItems": {
+              "type": "array",
+              "description": "List of detected food items",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name of the food item"
+                  },
+                  "portionSize": {
+                    "type": ["string", "null"],
+                    "description": "Estimated portion size (e.g., '1 cup', '150g')"
+                  },
+                  "calories": {
+                    "type": ["integer", "null"],
+                    "description": "Estimated calories for this item"
+                  },
+                  "confidence": {
+                    "type": "number",
+                    "description": "Confidence in detection (0.0 to 1.0)"
+                  }
+                },
+                "required": ["name", "portionSize", "calories", "confidence"],
+                "additionalProperties": false
+              }
+            },
+            "nutrition": {
+              "type": ["object", "null"],
+              "description": "Estimated nutritional information",
+              "properties": {
+                "totalCalories": {
+                  "type": ["integer", "null"],
+                  "description": "Total estimated calories"
+                },
+                "protein": {
+                  "type": ["number", "null"],
+                  "description": "Protein in grams"
+                },
+                "carbohydrates": {
+                  "type": ["number", "null"],
+                  "description": "Carbohydrates in grams"
+                },
+                "fat": {
+                  "type": ["number", "null"],
+                  "description": "Fat in grams"
+                },
+                "fiber": {
+                  "type": ["number", "null"],
+                  "description": "Fiber in grams"
+                },
+                "sugar": {
+                  "type": ["number", "null"],
+                  "description": "Sugar in grams"
+                },
+                "sodium": {
+                  "type": ["number", "null"],
+                  "description": "Sodium in milligrams"
+                }
+              },
+              "required": ["totalCalories", "protein", "carbohydrates", "fat", "fiber", "sugar", "sodium"],
+              "additionalProperties": false
+            },
+            "healthInsights": {
+              "type": ["object", "null"],
+              "description": "Overall health assessment",
+              "properties": {
+                "healthScore": {
+                  "type": ["number", "null"],
+                  "description": "Health score (0-10, where 10 is healthiest)"
+                },
+                "summary": {
+                  "type": ["string", "null"],
+                  "description": "Brief summary of health characteristics"
+                },
+                "positives": {
+                  "type": "array",
+                  "description": "Positive aspects of the meal",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "improvements": {
+                  "type": "array",
+                  "description": "Areas for improvement",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "recommendations": {
+                  "type": "array",
+                  "description": "Specific recommendations",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": ["healthScore", "summary", "positives", "improvements", "recommendations"],
+              "additionalProperties": false
+            },
+            "confidence": {
+              "type": "number",
+              "description": "Overall confidence in the analysis (0.0 to 1.0)"
+            },
+            "warnings": {
+              "type": "array",
+              "description": "Any warnings or errors",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["schemaVersion", "foodItems", "nutrition", "healthInsights", "confidence", "warnings"],
+          "additionalProperties": false
+        }
+        """;
     }
 }

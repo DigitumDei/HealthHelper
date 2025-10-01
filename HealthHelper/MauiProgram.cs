@@ -59,6 +59,7 @@ public static class MauiProgram
 
         builder.Services.AddTransient<IAnalysisOrchestrator, AnalysisOrchestrator>();
         builder.Services.AddTransient<ILLmClient, OpenAiLlmClient>();
+        builder.Services.AddSingleton<MealAnalysisValidator>();
 
         var app = builder.Build();
 
