@@ -37,5 +37,8 @@
         </Grid>
 
         <Button Text="Save" Command="{Binding SaveSettingsCommand}" />
+
+        <Button Text="Share Diagnostics Log"
+                Command="{Binding ShareDiagnosticsLogCommand}" />
     </VerticalStackLayout>
 </ContentPage>

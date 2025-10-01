@@ -1,7 +1,10 @@
+using System.IO;
 using CommunityToolkit.Maui;
 using HealthHelper.Data;
 using HealthHelper.Services.Analysis;
+using HealthHelper.Services.Logging;
 using HealthHelper.Services.Llm;
+using Microsoft.Maui.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -23,6 +26,13 @@ public static class MauiProgram
                 fonts.AddFont("FluentSystemIcons-Regular.ttf", FluentUI.FontFamily);
             });
 
+        var logsDirectory = Path.Combine(FileSystem.AppDataDirectory, "logs");
+        var logFilePath = Path.Combine(logsDirectory, "healthhelper.log");
+        const long maxLogFileSize = 1024 * 1024; // 1 MB
+
+        builder.Logging.AddConsole();
+        builder.Logging.AddProvider(new FileLoggerProvider(logFilePath, maxLogFileSize));
+
 #if DEBUG
         builder.Logging.AddDebug();
 #endif
@@ -35,6 +45,7 @@ public static class MauiProgram
         builder.Services.AddScoped<IDailySummaryRepository, SqliteDailySummaryRepository>();
 
         builder.Services.AddSingleton<IAppSettingsRepository, SecureStorageAppSettingsRepository>();
+        builder.Services.AddSingleton<ILogFileService>(_ => new LogFileService(logFilePath));
 
 
         builder.Services.AddTransient<MealLogViewModel>();

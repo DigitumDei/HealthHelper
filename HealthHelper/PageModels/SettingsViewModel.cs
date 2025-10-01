@@ -1,14 +1,20 @@
+using System;
+using System.Collections.ObjectModel;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using HealthHelper.Data;
 using HealthHelper.Models;
-using System.Collections.ObjectModel;
+using HealthHelper.Services.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace HealthHelper.PageModels;
 
 public partial class SettingsViewModel : ObservableObject
 {
     private readonly IAppSettingsRepository _appSettingsRepository;
+    private readonly ILogFileService _logFileService;
+    private readonly ILogger<SettingsViewModel> _logger;
     private AppSettings _appSettings;
 
     [ObservableProperty]
@@ -24,9 +30,14 @@ public partial class SettingsViewModel : ObservableObject
 
     public string ToggleIconGlyph => IsApiKeyMasked ? FluentUI.eye_24_regular : FluentUI.eye_off_24_regular;
 
-    public SettingsViewModel(IAppSettingsRepository appSettingsRepository)
+    public SettingsViewModel(
+        IAppSettingsRepository appSettingsRepository,
+        ILogFileService logFileService,
+        ILogger<SettingsViewModel> logger)
     {
         _appSettingsRepository = appSettingsRepository;
+        _logFileService = logFileService;
+        _logger = logger;
         Providers = new ObservableCollection<LlmProvider>(Enum.GetValues<LlmProvider>());
         _appSettings = new AppSettings();
     }
@@ -34,33 +45,65 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadSettingsAsync()
     {
-        _appSettings = await _appSettingsRepository.GetAppSettingsAsync();
-        SelectedProvider = _appSettings.SelectedProvider;
-        if (_appSettings.ApiKeys.TryGetValue(SelectedProvider, out var key))
+        try
         {
-            ApiKey = key;
+            _appSettings = await _appSettingsRepository.GetAppSettingsAsync();
+            SelectedProvider = _appSettings.SelectedProvider;
+            if (_appSettings.ApiKeys.TryGetValue(SelectedProvider, out var key))
+            {
+                ApiKey = key;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load app settings.");
+            await Shell.Current.DisplayAlertAsync("Error", "Unable to load settings.", "OK");
         }
     }
 
     [RelayCommand]
     private async Task SaveSettings()
     {
-        if (string.IsNullOrWhiteSpace(ApiKey))
+        try
         {
-            await Shell.Current.DisplayAlertAsync("Error", "API Key cannot be empty.", "OK");
-            return;
+            if (string.IsNullOrWhiteSpace(ApiKey))
+            {
+                await Shell.Current.DisplayAlertAsync("Error", "API Key cannot be empty.", "OK");
+                return;
+            }
+
+            _appSettings.SelectedProvider = SelectedProvider;
+
+            await _appSettingsRepository.SaveAppSettingsAsync(_appSettings);
+            _logger.LogInformation("Settings saved for provider {Provider}.", SelectedProvider);
+            await Shell.Current.DisplayAlertAsync("Success", "Settings saved.", "OK");
         }
-
-        _appSettings.SelectedProvider = SelectedProvider;
-
-        await _appSettingsRepository.SaveAppSettingsAsync(_appSettings);
-        await Shell.Current.DisplayAlertAsync("Success", "Settings saved.", "OK");
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save app settings.");
+            await Shell.Current.DisplayAlertAsync("Error", "Unable to save settings.", "OK");
+        }
     }
 
     [RelayCommand]
     private void ToggleApiKeyVisibility()
     {
         IsApiKeyMasked = !IsApiKeyMasked;
+    }
+
+    [RelayCommand]
+    private async Task ShareDiagnosticsLogAsync()
+    {
+        try
+        {
+            await _logFileService.ShareAsync();
+            _logger.LogInformation("Diagnostics log share initiated.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to share diagnostics log.");
+            await Shell.Current.DisplayAlertAsync("Error", "Unable to share diagnostics log.", "OK");
+        }
     }
 
     partial void OnSelectedProviderChanged(LlmProvider value)

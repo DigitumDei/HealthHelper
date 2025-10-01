@@ -15,7 +15,7 @@
             <Label Text="{Binding Meal.Description}" Style="{StaticResource Headline}" />
             <Label Text="{Binding Meal.CapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}" Style="{StaticResource Caption1}" />
 
-            <Label Text="Analysis" Style="{StaticResource TitleLarge}" Margin="0,16,0,0" />
+            <Label Text="Analysis" Style="{StaticResource Title2}" Margin="0,16,0,0" />
             <Label Text="{Binding AnalysisText}" Style="{StaticResource Body1}" />
 
             <Button Text="Delete"

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git.exe diff)",
+      "Bash(git.exe diff --cached)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
