@@ -8,6 +8,7 @@ namespace HealthHelper.Services.Logging;
 
 public sealed class FileLoggerProvider : ILoggerProvider
 {
+    private const int StartupTrimSizeBytes = 50 * 1024;
     private readonly ConcurrentDictionary<string, FileLogger> _loggers = new();
     private readonly string _logFilePath;
     private readonly long _maxFileSizeBytes;
@@ -22,6 +23,7 @@ public sealed class FileLoggerProvider : ILoggerProvider
         _logFilePath = logFilePath;
         _maxFileSizeBytes = maxFileSizeBytes;
         EnsureLogFileExists();
+        TrimLogFileOnStart();
     }
 
     public ILogger CreateLogger(string categoryName)
@@ -52,6 +54,51 @@ public sealed class FileLoggerProvider : ILoggerProvider
         if (!File.Exists(_logFilePath))
         {
             File.WriteAllText(_logFilePath, string.Empty);
+        }
+    }
+
+    private void TrimLogFileOnStart()
+    {
+        try
+        {
+            var fileInfo = new FileInfo(_logFilePath);
+            if (!fileInfo.Exists || fileInfo.Length <= StartupTrimSizeBytes)
+            {
+                return;
+            }
+
+            using var stream = new FileStream(_logFilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+            var bufferSize = (int)Math.Min(StartupTrimSizeBytes, stream.Length);
+            var buffer = new byte[bufferSize];
+
+            stream.Seek(-bufferSize, SeekOrigin.End);
+            var bytesRead = stream.Read(buffer, 0, buffer.Length);
+            if (bytesRead <= 0)
+            {
+                stream.SetLength(0);
+                return;
+            }
+
+            var startIndex = Array.IndexOf(buffer, (byte)'\n', 0, bytesRead);
+            if (startIndex >= 0 && startIndex < bytesRead - 1)
+            {
+                startIndex += 1;
+            }
+            else
+            {
+                startIndex = 0;
+            }
+
+            stream.SetLength(0);
+            stream.Write(buffer, startIndex, bytesRead - startIndex);
+        }
+        catch (IOException)
+        {
+            // Ignore trimming failures; logging will continue with the existing file.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Ignore trimming failures; logging will continue with the existing file.
         }
     }
 

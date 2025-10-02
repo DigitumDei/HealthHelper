@@ -1,15 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
 using HealthHelper.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Storage;
 using OpenAI;
 using OpenAI.Chat;
+using System.Text;
+using System.Text.Json;
 
 namespace HealthHelper.Services.Llm;
 
@@ -36,13 +30,11 @@ public class OpenAiLlmClient : ILLmClient
 
         try
         {
+            // Note: CreateJsonSchemaFormat causes serialization errors on Android
+            // Using CreateJsonObjectFormat as workaround - schema is still enforced via prompt
             var options = new ChatCompletionOptions
             {
-                ResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
-                    jsonSchemaFormatName: "meal_analysis",
-                    jsonSchema: BinaryData.FromString(GetMealAnalysisSchema()),
-                    jsonSchemaIsStrict: true
-                )
+                ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
             };
 
             var response = await chatClient.CompleteChatAsync(messages, options);
@@ -94,11 +86,20 @@ public class OpenAiLlmClient : ILLmClient
 
     private static async Task<List<ChatMessage>> CreateChatRequest(TrackedEntry entry)
     {
-        var systemPrompt = @"You are a helpful assistant that analyzes meal photos.
+        var systemPrompt = $@"You are a helpful assistant that analyzes meal photos.
 Identify all food items, estimate portion sizes, and provide nutritional information.
 Give an overall health assessment with specific recommendations.
 Be accurate but acknowledge uncertainty when applicable.
-Return your analysis in the structured JSON format specified.";
+
+You MUST return your analysis as a JSON object matching this exact schema:
+{GetMealAnalysisSchema()}
+
+Important rules:
+- If no food is detected, return an empty foodItems array and add a warning explaining why
+- All required fields must be present, use null for unknown values
+- Arrays can be empty but must be present
+- Confidence values must be between 0.0 and 1.0
+- schemaVersion must always be ""1.0""";
 
         var messages = new List<ChatMessage>
         {

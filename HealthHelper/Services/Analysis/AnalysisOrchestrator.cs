@@ -1,7 +1,3 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Services.Llm;
@@ -16,7 +12,7 @@ public interface IAnalysisOrchestrator
 
 public class AnalysisOrchestrator : IAnalysisOrchestrator
 {
-    private const string DefaultOpenAiVisionModel = "gpt-4o-mini";
+    private const string DefaultOpenAiVisionModel = "gpt-5-mini";
 
     private readonly IAppSettingsRepository _appSettingsRepository;
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
