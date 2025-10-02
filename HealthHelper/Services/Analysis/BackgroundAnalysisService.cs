@@ -1,3 +1,6 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,7 +13,7 @@ public interface IBackgroundAnalysisService
     /// <summary>
     /// Queue an entry for background analysis
     /// </summary>
-    Task QueueEntryAsync(int entryId);
+    Task QueueEntryAsync(int entryId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Event raised when an entry's processing status changes
@@ -31,7 +34,7 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
         _logger = logger;
     }
 
-    public Task QueueEntryAsync(int entryId)
+    public Task QueueEntryAsync(int entryId, CancellationToken cancellationToken = default)
     {
         _ = Task.Run(async () =>
         {
@@ -41,6 +44,13 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
 
             try
             {
+                // Check cancellation before starting
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation("Analysis cancelled before starting for entry {EntryId}.", entryId);
+                    return;
+                }
+
                 await UpdateStatusAsync(entryRepository, entryId, ProcessingStatus.Processing);
 
                 var entry = await entryRepository.GetByIdAsync(entryId);
@@ -50,7 +60,23 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
                     return;
                 }
 
-                var result = await orchestrator.ProcessEntryAsync(entry);
+                // Check cancellation before expensive LLM call
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation("Analysis cancelled before LLM call for entry {EntryId}.", entryId);
+                    await UpdateStatusAsync(entryRepository, entryId, ProcessingStatus.Pending);
+                    return;
+                }
+
+                var result = await orchestrator.ProcessEntryAsync(entry, cancellationToken);
+
+                // Check cancellation after LLM call
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation("Analysis cancelled after LLM call for entry {EntryId}.", entryId);
+                    await UpdateStatusAsync(entryRepository, entryId, ProcessingStatus.Pending);
+                    return;
+                }
 
                 var finalStatus = result.IsQueued
                     ? ProcessingStatus.Completed
@@ -60,12 +86,17 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
 
                 await UpdateStatusAsync(entryRepository, entryId, finalStatus);
             }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("Background analysis was cancelled for entry {EntryId}.", entryId);
+                await UpdateStatusAsync(entryRepository, entryId, ProcessingStatus.Pending);
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Background analysis failed for entry {EntryId}.", entryId);
                 await UpdateStatusAsync(entryRepository, entryId, ProcessingStatus.Failed);
             }
-        });
+        }, cancellationToken);
         return Task.CompletedTask;
     }
 

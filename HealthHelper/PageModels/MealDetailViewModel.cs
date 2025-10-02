@@ -107,6 +107,43 @@ public partial class MealDetailViewModel : ObservableObject
 
             var sb = new StringBuilder();
 
+            // Check for warnings first (e.g., no food detected)
+            if (result.Warnings?.Any() == true)
+            {
+                sb.AppendLine("ℹ️ Analysis Notes:");
+                foreach (var warning in result.Warnings)
+                {
+                    sb.AppendLine($"  {warning}");
+                }
+                sb.AppendLine();
+            }
+
+            // If no food items, show a friendly message
+            if (result.FoodItems?.Any() != true)
+            {
+                sb.AppendLine("🔍 No Food Detected");
+                sb.AppendLine();
+                sb.AppendLine("This image doesn't appear to contain any food items.");
+                sb.AppendLine();
+
+                // Show health insights summary if available (LLM might explain why)
+                if (!string.IsNullOrEmpty(result.HealthInsights?.Summary))
+                {
+                    sb.AppendLine($"{result.HealthInsights.Summary}");
+                    sb.AppendLine();
+                }
+
+                // If there's literally nothing, provide helpful guidance
+                if (string.IsNullOrEmpty(result.HealthInsights?.Summary) &&
+                    (result.Warnings == null || !result.Warnings.Any()))
+                {
+                    sb.AppendLine("💡 Tip: This app analyzes photos of meals and food items.");
+                    sb.AppendLine("Try taking a photo of your next meal for nutritional insights!");
+                }
+
+                return sb.ToString();
+            }
+
             // Food Items
             if (result.FoodItems?.Any() == true)
             {
@@ -128,7 +165,7 @@ public partial class MealDetailViewModel : ObservableObject
             }
 
             // Nutrition
-            if (result.Nutrition is not null)
+            if (result.Nutrition is not null && result.Nutrition.TotalCalories.HasValue)
             {
                 sb.AppendLine("📊 Nutrition:");
                 if (result.Nutrition.TotalCalories.HasValue)

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
+using HealthHelper.Services.Analysis;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace HealthHelper;
@@ -7,15 +9,33 @@ namespace HealthHelper;
 public partial class App : Application
 {
     private readonly ILogger<App> _logger;
+    private readonly IServiceProvider _serviceProvider;
 
-    public App(ILogger<App> logger)
+    public App(ILogger<App> logger, IServiceProvider serviceProvider)
     {
         _logger = logger;
+        _serviceProvider = serviceProvider;
 
         InitializeComponent();
 
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+
+        // Recover any stale entries from previous app session
+        // Use a scope since StaleEntryRecoveryService is scoped
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var recoveryService = scope.ServiceProvider.GetRequiredService<IStaleEntryRecoveryService>();
+                await recoveryService.RecoverStaleEntriesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to run stale entry recovery on startup.");
+            }
+        });
     }
 
     protected override Window CreateWindow(IActivationState? activationState)

@@ -130,17 +130,26 @@ public partial class MealLogViewModel : ObservableObject
     [RelayCommand]
     private async Task RetryAnalysis(MealPhoto meal)
     {
+        _logger.LogInformation("RetryAnalysis called for entry {EntryId} with status {Status}", meal.EntryId, meal.ProcessingStatus);
+
         if (meal.ProcessingStatus != ProcessingStatus.Failed && meal.ProcessingStatus != ProcessingStatus.Skipped)
         {
+            _logger.LogWarning("RetryAnalysis called for an entry that is not in a failed or skipped state.");
             return;
         }
 
         _logger.LogInformation("Retrying analysis for entry {EntryId}.", meal.EntryId);
 
-        // Update to pending status
+        // Update to pending status in UI
         meal.ProcessingStatus = ProcessingStatus.Pending;
+        _logger.LogInformation("Status changed to Pending in UI for entry {EntryId}.", meal.EntryId);
+
+        // Persist to database immediately so LoadEntriesAsync sees the correct state
+        await _trackedEntryRepository.UpdateProcessingStatusAsync(meal.EntryId, ProcessingStatus.Pending);
+        _logger.LogInformation("Status persisted to database for entry {EntryId}.", meal.EntryId);
 
         // Queue for processing
         await _backgroundAnalysisService.QueueEntryAsync(meal.EntryId);
+        _logger.LogInformation("Analysis re-queued for entry {EntryId}.", meal.EntryId);
     }
 }

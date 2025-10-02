@@ -24,6 +24,7 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
     public async Task<IEnumerable<TrackedEntry>> GetByDayAsync(DateTime date)
     {
         var entries = await _context.TrackedEntries
+            .AsNoTracking()  // Disable EF tracking to always get fresh data from DB
             .Where(e => e.CapturedAt.Date == date.Date)
             .ToListAsync();
 
@@ -55,8 +56,10 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
     }
 
     public async Task<TrackedEntry?> GetByIdAsync(int entryId)
-    { 
-        var entry = await _context.TrackedEntries.FindAsync(entryId);
+    {
+        var entry = await _context.TrackedEntries
+            .AsNoTracking()  // Disable EF tracking to always get fresh data from DB
+            .FirstOrDefaultAsync(e => e.EntryId == entryId);
         if (entry is not null)
         {
             DeserializePayload(entry);
