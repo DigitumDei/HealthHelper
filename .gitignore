@@ -363,3 +363,7 @@ MigrationBackup/
 FodyWeavers.xsd
 .env
 HealthHelper/healthhelper.keystore
+/.claude/settings.local.json
+
+# Tooling
+healthhelper_design.db3

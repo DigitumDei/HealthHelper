@@ -46,6 +46,7 @@ public static class MauiProgram
 
         builder.Services.AddSingleton<IAppSettingsRepository, SecureStorageAppSettingsRepository>();
         builder.Services.AddSingleton<ILogFileService>(_ => new LogFileService(logFilePath));
+        builder.Services.AddSingleton<IBackgroundAnalysisService, BackgroundAnalysisService>();
 
 
         builder.Services.AddTransient<MealLogViewModel>();

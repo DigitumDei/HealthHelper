@@ -12,6 +12,7 @@ public class TrackedEntry
     public string? BlobPath { get; set; }
     public string DataPayload { get; set; } = string.Empty;
     public int DataSchemaVersion { get; set; }
+    public ProcessingStatus ProcessingStatus { get; set; } = ProcessingStatus.Pending;
 
     [NotMapped]
     public IEntryPayload Payload { get; set; } = new MealPayload();

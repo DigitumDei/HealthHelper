@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Pages;
+using HealthHelper.Services.Analysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
@@ -17,12 +18,14 @@ namespace HealthHelper.PageModels;
 public partial class MealLogViewModel : ObservableObject
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
+    private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly ILogger<MealLogViewModel> _logger;
     public ObservableCollection<MealPhoto> Meals { get; } = new();
 
-    public MealLogViewModel(ITrackedEntryRepository trackedEntryRepository, ILogger<MealLogViewModel> logger)
+    public MealLogViewModel(ITrackedEntryRepository trackedEntryRepository, IBackgroundAnalysisService backgroundAnalysisService, ILogger<MealLogViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
+        _backgroundAnalysisService = backgroundAnalysisService;
         _logger = logger;
     }
 
@@ -32,6 +35,16 @@ public partial class MealLogViewModel : ObservableObject
         if (meal is null)
         {
             _logger.LogWarning("Attempted to navigate to meal details with a null meal reference.");
+            return;
+        }
+
+        if (!meal.IsClickable)
+        {
+            _logger.LogInformation("Entry {EntryId} is not yet ready for viewing.", meal.EntryId);
+            await Shell.Current.DisplayAlertAsync(
+                "Still Processing",
+                "This meal is still being analyzed. Please wait a moment.",
+                "OK");
             return;
         }
 
@@ -65,7 +78,7 @@ public partial class MealLogViewModel : ObservableObject
                 {
                     var mealPayload = (MealPayload)entry.Payload!;
                     var fullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath!);
-                    return new MealPhoto(entry.EntryId, fullPath, mealPayload.Description ?? string.Empty, entry.CapturedAt);
+                    return new MealPhoto(entry.EntryId, fullPath, mealPayload.Description ?? string.Empty, entry.CapturedAt, entry.ProcessingStatus);
                 })
                 .ToList();
 
@@ -83,5 +96,51 @@ public partial class MealLogViewModel : ObservableObject
             _logger.LogError(ex, "Failed to load meal entries.");
             await MainThread.InvokeOnMainThreadAsync(() => Shell.Current.DisplayAlertAsync("Error", "Unable to load meals. Try again later.", "OK"));
         }
+    }
+
+    public async Task AddPendingEntryAsync(TrackedEntry entry)
+    {
+        var mealPayload = (MealPayload)entry.Payload!;
+        var fullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath!);
+        var mealPhoto = new MealPhoto(
+            entry.EntryId,
+            fullPath,
+            mealPayload.Description ?? string.Empty,
+            entry.CapturedAt,
+            entry.ProcessingStatus);
+
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            Meals.Insert(0, mealPhoto);
+        });
+    }
+
+    public async Task UpdateEntryStatusAsync(int entryId, ProcessingStatus newStatus)
+    {
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            var existingEntry = Meals.FirstOrDefault(m => m.EntryId == entryId);
+            if (existingEntry is not null)
+            {
+                existingEntry.ProcessingStatus = newStatus;
+            }
+        });
+    }
+
+    [RelayCommand]
+    private async Task RetryAnalysis(MealPhoto meal)
+    {
+        if (meal.ProcessingStatus != ProcessingStatus.Failed && meal.ProcessingStatus != ProcessingStatus.Skipped)
+        {
+            return;
+        }
+
+        _logger.LogInformation("Retrying analysis for entry {EntryId}.", meal.EntryId);
+
+        // Update to pending status
+        meal.ProcessingStatus = ProcessingStatus.Pending;
+
+        // Queue for processing
+        await _backgroundAnalysisService.QueueEntryAsync(meal.EntryId);
     }
 }

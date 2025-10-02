@@ -29,11 +29,7 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
 
         foreach (var entry in entries)
         {
-            // A more robust implementation would use the EntryType to deserialize to the correct type
-            if (entry.EntryType == "Meal")
-            {
-                entry.Payload = JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload();
-            }
+            DeserializePayload(entry);
         }
         return entries;
     }
@@ -45,6 +41,35 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         {
             _context.TrackedEntries.Remove(entry);
             await _context.SaveChangesAsync();
+        }
+    }
+
+    public async Task UpdateProcessingStatusAsync(int entryId, ProcessingStatus status)
+    {
+        var entry = await _context.TrackedEntries.FindAsync(entryId);
+        if (entry is not null)
+        {
+            entry.ProcessingStatus = status;
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    public async Task<TrackedEntry?> GetByIdAsync(int entryId)
+    { 
+        var entry = await _context.TrackedEntries.FindAsync(entryId);
+        if (entry is not null)
+        {
+            DeserializePayload(entry);
+        }
+        return entry;
+    }
+
+    private void DeserializePayload(TrackedEntry entry)
+    {
+        // A more robust implementation would use the EntryType to deserialize to the correct type
+        if (entry.EntryType == "Meal")
+        {
+            entry.Payload = JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload();
         }
     }
 }

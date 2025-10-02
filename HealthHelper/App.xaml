@@ -2,6 +2,7 @@
 <Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:HealthHelper"
+             xmlns:converters="clr-namespace:HealthHelper.Converters"
              x:Class="HealthHelper.App">
     <Application.Resources>
         <ResourceDictionary>
@@ -10,6 +11,11 @@
                 <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
                 <ResourceDictionary Source="Resources/Styles/AppStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
+
+            <converters:InvertedBoolConverter x:Key="InvertedBoolConverter" />
+            <converters:IsProcessingConverter x:Key="IsProcessingConverter" />
+            <converters:IsFailedConverter x:Key="IsFailedConverter" />
+            <converters:IsSkippedConverter x:Key="IsSkippedConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

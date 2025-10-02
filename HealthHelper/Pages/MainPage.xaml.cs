@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using System.Threading.Tasks;
 using HealthHelper.Data;
 using HealthHelper.Models;
@@ -10,26 +10,33 @@ namespace HealthHelper.Pages;
 public partial class MainPage : ContentPage
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
-    private readonly IAnalysisOrchestrator _analysisOrchestrator;
+    private readonly IBackgroundAnalysisService _backgroundAnalysisService;
 
     public MainPage(
         MealLogViewModel viewModel,
         ITrackedEntryRepository trackedEntryRepository,
-        IAnalysisOrchestrator analysisOrchestrator)
+        IBackgroundAnalysisService backgroundAnalysisService)
     {
         InitializeComponent();
         BindingContext = viewModel;
         _trackedEntryRepository = trackedEntryRepository;
-        _analysisOrchestrator = analysisOrchestrator;
+        _backgroundAnalysisService = backgroundAnalysisService;
     }
 
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+        _backgroundAnalysisService.StatusChanged += OnEntryStatusChanged;
         if (BindingContext is MealLogViewModel vm)
         {
             await vm.LoadEntriesAsync();
         }
+    }
+
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+        _backgroundAnalysisService.StatusChanged -= OnEntryStatusChanged;
     }
 
     private async void TakePhotoButton_Clicked(object sender, EventArgs e)
@@ -73,32 +80,18 @@ public partial class MainPage : ContentPage
                 CapturedAt = DateTime.UtcNow,
                 BlobPath = Path.Combine("Entries", "Meal", uniqueFileName),
                 Payload = new Models.MealPayload { Description = "New meal photo" },
-                DataSchemaVersion = 1
+                DataSchemaVersion = 1,
+                ProcessingStatus = ProcessingStatus.Pending
             };
 
             await _trackedEntryRepository.AddAsync(newEntry);
 
-            var analysisResult = await Task.Run(() => _analysisOrchestrator.ProcessEntryAsync(newEntry));
-            if (!analysisResult.IsQueued && !string.IsNullOrWhiteSpace(analysisResult.UserMessage))
-            {
-                if (analysisResult.RequiresCredentials)
-                {
-                    bool openSettings = await DisplayAlertAsync("Connect LLM", analysisResult.UserMessage, "Open Settings", "Dismiss");
-                    if (openSettings)
-                    {
-                        await Shell.Current.GoToAsync(nameof(SettingsPage));
-                    }
-                }
-                else
-                {
-                    await DisplayAlertAsync("Analysis", analysisResult.UserMessage, "OK");
-                }
-            }
-
             if (BindingContext is MealLogViewModel vm)
             {
-                await vm.LoadEntriesAsync();
+                await vm.AddPendingEntryAsync(newEntry);
             }
+
+            await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId);
         }
         catch (Exception ex)
         {
@@ -118,11 +111,35 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        await vm.GoToMealDetailCommand.ExecuteAsync(selectedMeal);
+        if (selectedMeal.ProcessingStatus == ProcessingStatus.Failed || selectedMeal.ProcessingStatus == ProcessingStatus.Skipped)
+        {
+            await vm.RetryAnalysisCommand.ExecuteAsync(selectedMeal);
+        }
+        else if (selectedMeal.IsClickable)
+        {
+            await vm.GoToMealDetailCommand.ExecuteAsync(selectedMeal);
+        }
 
         if (sender is CollectionView collectionView)
         {
             collectionView.SelectedItem = null;
+        }
+    }
+
+    private async void OnEntryStatusChanged(object? sender, EntryStatusChangedEventArgs e)
+    {
+        if (BindingContext is MealLogViewModel vm)
+        {
+            await vm.UpdateEntryStatusAsync(e.EntryId, e.Status);
+        }
+
+        if (e.Status == ProcessingStatus.Skipped)
+        {
+            bool openSettings = await DisplayAlertAsync("Connect LLM", "An API key is required for analysis. Please add one in settings.", "Open Settings", "Dismiss");
+            if (openSettings)
+            {
+                await Shell.Current.GoToAsync(nameof(SettingsPage));
+            }
         }
     }
 
@@ -170,5 +187,4 @@ public partial class MainPage : ContentPage
 #endif
         return true;
     }
-
 }

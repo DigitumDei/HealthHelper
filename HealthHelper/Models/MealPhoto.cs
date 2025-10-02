@@ -1,3 +1,30 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace HealthHelper.Models;
 
-public sealed record MealPhoto(int EntryId, string FullPath, string Description, DateTimeOffset CapturedAt);
+public partial class MealPhoto : ObservableObject
+{
+    public int EntryId { get; init; }
+    public string FullPath { get; init; }
+    public string Description { get; init; }
+    public DateTime CapturedAt { get; init; }
+
+    [ObservableProperty]
+    private ProcessingStatus processingStatus;
+
+    public bool IsClickable => ProcessingStatus == ProcessingStatus.Completed;
+
+    public MealPhoto(int entryId, string fullPath, string description, DateTime capturedAt, ProcessingStatus processingStatus)
+    {
+        EntryId = entryId;
+        FullPath = fullPath;
+        Description = description;
+        CapturedAt = capturedAt;
+        ProcessingStatus = processingStatus;
+    }
+
+    partial void OnProcessingStatusChanged(ProcessingStatus value)
+    {
+        OnPropertyChanged(nameof(IsClickable));
+    }
+}
