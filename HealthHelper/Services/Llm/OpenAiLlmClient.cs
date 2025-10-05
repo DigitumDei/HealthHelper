@@ -1,9 +1,11 @@
+using System;
+using System.ClientModel;
+using System.Text;
+using System.Text.Json;
 using HealthHelper.Models;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
-using System.Text;
-using System.Text.Json;
 
 namespace HealthHelper.Services.Llm;
 
@@ -31,13 +33,13 @@ public class OpenAiLlmClient : ILLmClient
         try
         {
             // Note: CreateJsonSchemaFormat causes serialization errors on Android
-            // Using CreateJsonObjectFormat as workaround - schema is still enforced via prompt
+            // Using CreateJsonObjectFormat as first pass - schema is still enforced via prompt
             var options = new ChatCompletionOptions
             {
                 ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
             };
 
-            var response = await chatClient.CompleteChatAsync(messages, options);
+            var response = await CompleteChatWithFallbackAsync(chatClient, messages, options);
 
             var insights = ExtractTextContent(response.Value.Content);
 
@@ -82,6 +84,24 @@ public class OpenAiLlmClient : ILLmClient
             _logger.LogError(ex, "OpenAI API request failed.");
             throw;
         }
+    }
+
+    private async Task<ClientResult<ChatCompletion>> CompleteChatWithFallbackAsync(ChatClient chatClient, IReadOnlyList<ChatMessage> messages, ChatCompletionOptions options)
+    {
+        try
+        {
+            return await chatClient.CompleteChatAsync(messages, options).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException ex) when (IsResponseFormatSerializationBug(ex))
+        {
+            _logger.LogWarning(ex, "Response format serialization failed; retrying without explicit format.");
+            return await chatClient.CompleteChatAsync(messages).ConfigureAwait(false);
+        }
+    }
+
+    private static bool IsResponseFormatSerializationBug(InvalidOperationException ex)
+    {
+        return ex.Message?.Contains("WriteCore method", StringComparison.OrdinalIgnoreCase) == true;
     }
 
     private static async Task<List<ChatMessage>> CreateChatRequest(TrackedEntry entry)
