@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using HealthHelper.Data;
 using HealthHelper.Models;
+using HealthHelper.Services.Analysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 
@@ -18,21 +19,35 @@ public partial class MealDetailViewModel : ObservableObject
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
+    private readonly IAnalysisOrchestrator _analysisOrchestrator;
     private readonly ILogger<MealDetailViewModel> _logger;
 
     [ObservableProperty]
-    private MealPhoto meal;
+    private MealPhoto? meal;
 
     [ObservableProperty]
-    private string analysisText;
+    private string analysisText = string.Empty;
+
+    [ObservableProperty]
+    private bool isCorrectionMode;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SubmitCorrectionCommand))]
+    private string correctionText = string.Empty;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SubmitCorrectionCommand))]
+    private bool isSubmittingCorrection;
 
     public MealDetailViewModel(
         ITrackedEntryRepository trackedEntryRepository,
         IEntryAnalysisRepository entryAnalysisRepository,
+        IAnalysisOrchestrator analysisOrchestrator,
         ILogger<MealDetailViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
         _entryAnalysisRepository = entryAnalysisRepository;
+        _analysisOrchestrator = analysisOrchestrator;
         _logger = logger;
     }
 
@@ -64,7 +79,7 @@ public partial class MealDetailViewModel : ObservableObject
         }
     }
 
-    partial void OnMealChanged(MealPhoto value)
+    partial void OnMealChanged(MealPhoto? value)
     {
         _ = LoadAnalysisAsync();
     }
@@ -93,6 +108,94 @@ public partial class MealDetailViewModel : ObservableObject
             _logger.LogError(ex, "Failed to load analysis for entry {EntryId}.", Meal.EntryId);
             AnalysisText = "We couldn't load the analysis for this meal.";
         }
+    }
+
+    public string CorrectionToggleButtonText => IsCorrectionMode ? "Cancel correction" : "Update analysis";
+
+    [RelayCommand]
+    private void ToggleCorrection()
+    {
+        if (IsSubmittingCorrection)
+        {
+            return;
+        }
+
+        IsCorrectionMode = !IsCorrectionMode;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSubmitCorrection))]
+    private async Task SubmitCorrectionAsync()
+    {
+        if (Meal is null)
+        {
+            _logger.LogWarning("SubmitCorrection invoked without a selected meal.");
+            return;
+        }
+
+        var trimmedCorrection = CorrectionText?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedCorrection))
+        {
+            return;
+        }
+
+        try
+        {
+            IsSubmittingCorrection = true;
+            _logger.LogInformation("Submitting correction for entry {EntryId}.", Meal.EntryId);
+
+            var trackedEntry = await _trackedEntryRepository.GetByIdAsync(Meal.EntryId).ConfigureAwait(false);
+            if (trackedEntry is null)
+            {
+                _logger.LogWarning("Tracked entry {EntryId} not found when submitting correction.", Meal.EntryId);
+                await ShowAlertOnMainThreadAsync("Update failed", "We couldn't find this meal entry anymore. Try refreshing.");
+                return;
+            }
+
+            var existingAnalysis = await _entryAnalysisRepository.GetByTrackedEntryIdAsync(Meal.EntryId).ConfigureAwait(false);
+            if (existingAnalysis is null)
+            {
+                _logger.LogWarning("No analysis exists for entry {EntryId}; cannot apply correction.", Meal.EntryId);
+                await ShowAlertOnMainThreadAsync("No analysis yet", "We need an existing analysis before you can submit corrections.");
+                return;
+            }
+
+            var result = await _analysisOrchestrator
+                .ProcessCorrectionAsync(trackedEntry, existingAnalysis, trimmedCorrection!)
+                .ConfigureAwait(false);
+
+            if (result.IsQueued)
+            {
+                _logger.LogInformation("Successfully applied correction for entry {EntryId}.", Meal.EntryId);
+                await LoadAnalysisAsync().ConfigureAwait(false);
+                await ShowAlertOnMainThreadAsync("Analysis updated", "Thanks! We've updated the analysis with your notes.");
+                IsCorrectionMode = false;
+                CorrectionText = string.Empty;
+            }
+            else
+            {
+                var message = result.UserMessage ?? "We couldn't update the analysis. Try again later.";
+                await ShowAlertOnMainThreadAsync("Update failed", message);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to submit correction for entry {EntryId}.", Meal.EntryId);
+            await ShowAlertOnMainThreadAsync("Update failed", "We couldn't update this analysis. Try again later.");
+        }
+        finally
+        {
+            IsSubmittingCorrection = false;
+        }
+    }
+
+    private bool CanSubmitCorrection()
+    {
+        return !IsSubmittingCorrection && !string.IsNullOrWhiteSpace(CorrectionText);
+    }
+
+    private static async Task ShowAlertOnMainThreadAsync(string title, string message)
+    {
+        await MainThread.InvokeOnMainThreadAsync(() => Shell.Current.DisplayAlertAsync(title, message, "OK"));
     }
 
     private string FormatStructuredAnalysis(EntryAnalysis analysis)
@@ -241,6 +344,16 @@ public partial class MealDetailViewModel : ObservableObject
         {
             _logger.LogWarning(ex, "Failed to parse structured analysis, showing raw JSON.");
             return analysis.InsightsJson;
+        }
+    }
+
+    partial void OnIsCorrectionModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CorrectionToggleButtonText));
+
+        if (!value)
+        {
+            CorrectionText = string.Empty;
         }
     }
 }

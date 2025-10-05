@@ -12,6 +12,7 @@
 - `dotnet build HealthHelper/HealthHelper.csproj -t:Run` launches the MAUI app on the default target.
 - `dotnet test` (run from the repo root) executes all test projects as they are added.
 - `dotnet maui-check` is a one-time tooling sanity check per developer machine.
+- Always invoke the .NET CLI as `dotnet.exe` (without an explicit path) to ensure the shim on the PATH is used.
 
 ## Coding Style & Naming Conventions
 - Follow standard .NET conventions: 4-space indentation, PascalCase for types and public members, camelCase for locals and private fields (use `_` prefixes only for property backing fields).

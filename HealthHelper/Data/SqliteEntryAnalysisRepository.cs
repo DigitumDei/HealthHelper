@@ -17,6 +17,7 @@ public class SqliteEntryAnalysisRepository : IEntryAnalysisRepository
     {
         await _context.EntryAnalyses.AddAsync(analysis);
         await _context.SaveChangesAsync();
+        _context.Entry(analysis).State = EntityState.Detached;
     }
 
     public async Task<IEnumerable<EntryAnalysis>> ListByDayAsync(DateTime date)
@@ -29,6 +30,35 @@ public class SqliteEntryAnalysisRepository : IEntryAnalysisRepository
     public async Task<EntryAnalysis?> GetByTrackedEntryIdAsync(int trackedEntryId)
     {
         return await _context.EntryAnalyses
+            .AsNoTracking()
             .FirstOrDefaultAsync(a => a.EntryId == trackedEntryId);
+    }
+
+    public async Task UpdateAsync(EntryAnalysis analysis)
+    {
+        var tracked = await _context.EntryAnalyses
+            .FindAsync(analysis.AnalysisId)
+            .ConfigureAwait(false);
+
+        if (tracked is null)
+        {
+            _context.EntryAnalyses.Attach(analysis);
+            _context.Entry(analysis).State = EntityState.Modified;
+        }
+        else
+        {
+            _context.Entry(tracked).CurrentValues.SetValues(analysis);
+        }
+
+        await _context.SaveChangesAsync().ConfigureAwait(false);
+
+        if (tracked is not null)
+        {
+            _context.Entry(tracked).State = EntityState.Detached;
+        }
+        else
+        {
+            _context.Entry(analysis).State = EntityState.Detached;
+        }
     }
 }

@@ -18,7 +18,11 @@ public class OpenAiLlmClient : ILLmClient
         _logger = logger;
     }
 
-    public async Task<LlmAnalysisResult> InvokeAnalysisAsync(TrackedEntry entry, LlmRequestContext context)
+    public async Task<LlmAnalysisResult> InvokeAnalysisAsync(
+        TrackedEntry entry,
+        LlmRequestContext context,
+        string? existingAnalysisJson = null,
+        string? correction = null)
     {
         if (string.IsNullOrWhiteSpace(context.ApiKey))
         {
@@ -28,7 +32,7 @@ public class OpenAiLlmClient : ILLmClient
         var client = new OpenAIClient(context.ApiKey);
         var chatClient = client.GetChatClient(context.ModelId);
 
-        var messages = await CreateChatRequest(entry);
+        var messages = await CreateChatRequest(entry, existingAnalysisJson, correction);
 
         try
         {
@@ -104,12 +108,18 @@ public class OpenAiLlmClient : ILLmClient
         return ex.Message?.Contains("WriteCore method", StringComparison.OrdinalIgnoreCase) == true;
     }
 
-    private static async Task<List<ChatMessage>> CreateChatRequest(TrackedEntry entry)
+    private static async Task<List<ChatMessage>> CreateChatRequest(
+        TrackedEntry entry,
+        string? existingAnalysisJson,
+        string? correction)
     {
         var systemPrompt = $@"You are a helpful assistant that analyzes meal photos.
 Identify all food items, estimate portion sizes, and provide nutritional information.
 Give an overall health assessment with specific recommendations.
 Be accurate but acknowledge uncertainty when applicable.
+
+If the user provides corrections or additional details after your previous response,
+incorporate the new information and regenerate the entire JSON output.
 
 You MUST return your analysis as a JSON object matching this exact schema:
 {GetMealAnalysisSchema()}
@@ -126,9 +136,13 @@ Important rules:
             new SystemChatMessage(systemPrompt),
         };
 
+        var userInstruction = string.IsNullOrWhiteSpace(correction)
+            ? "Analyze this meal."
+            : "Re-analyze this meal using the user's corrections.";
+
         var userMessageContent = new List<ChatMessageContentPart>
         {
-            ChatMessageContentPart.CreateTextPart("Analyze this meal.")
+            ChatMessageContentPart.CreateTextPart(userInstruction)
         };
 
         var absoluteBlobPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath ?? string.Empty);
@@ -151,6 +165,22 @@ Important rules:
         }
 
         messages.Add(new UserChatMessage(userMessageContent));
+
+        if (!string.IsNullOrWhiteSpace(existingAnalysisJson))
+        {
+            messages.Add(new AssistantChatMessage(existingAnalysisJson));
+        }
+
+        if (!string.IsNullOrWhiteSpace(correction))
+        {
+            var correctionText = correction.Trim();
+            var correctionParts = new List<ChatMessageContentPart>
+            {
+                ChatMessageContentPart.CreateTextPart($"Correction from the user:\n{correctionText}")
+            };
+
+            messages.Add(new UserChatMessage(correctionParts));
+        }
 
         return messages;
     }

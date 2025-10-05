@@ -5,7 +5,11 @@ namespace HealthHelper.Services.Llm;
 
 public interface ILLmClient
 {
-    Task<LlmAnalysisResult> InvokeAnalysisAsync(TrackedEntry entry, LlmRequestContext context);
+    Task<LlmAnalysisResult> InvokeAnalysisAsync(
+        TrackedEntry entry,
+        LlmRequestContext context,
+        string? existingAnalysisJson = null,
+        string? correction = null);
 }
 
 public class LlmRequestContext

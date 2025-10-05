@@ -18,6 +18,30 @@
             <Label Text="Analysis" Style="{StaticResource Title2}" Margin="0,16,0,0" />
             <Label Text="{Binding AnalysisText}" Style="{StaticResource Body1}" />
 
+            <Button Text="{Binding CorrectionToggleButtonText}"
+                    Command="{Binding ToggleCorrectionCommand}"
+                    Margin="0,16,0,0" />
+
+            <Border IsVisible="{Binding IsCorrectionMode}"
+                    Padding="16">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="12" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Add any details we missed so the analysis can be corrected."
+                           Style="{StaticResource Caption1}" />
+                    <Editor Text="{Binding CorrectionText}"
+                            Placeholder="Describe what's actually in the meal or what needs to change."
+                            AutoSize="TextChanges"
+                            MinimumHeightRequest="120" />
+                    <ActivityIndicator IsVisible="{Binding IsSubmittingCorrection}"
+                                       IsRunning="{Binding IsSubmittingCorrection}"
+                                       HorizontalOptions="Start" />
+                    <Button Text="Send correction"
+                            Command="{Binding SubmitCorrectionCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
             <Button Text="Delete"
                     Command="{Binding DeleteCommand}"
                     BackgroundColor="{StaticResource Error}"

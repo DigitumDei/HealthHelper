@@ -8,6 +8,7 @@ namespace HealthHelper.Services.Analysis;
 public interface IAnalysisOrchestrator
 {
     Task<AnalysisInvocationResult> ProcessEntryAsync(TrackedEntry entry, CancellationToken cancellationToken = default);
+    Task<AnalysisInvocationResult> ProcessCorrectionAsync(TrackedEntry entry, EntryAnalysis existingAnalysis, string correction, CancellationToken cancellationToken = default);
 }
 
 public class AnalysisOrchestrator : IAnalysisOrchestrator
@@ -34,7 +35,32 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         _logger = logger;
     }
 
-    public async Task<AnalysisInvocationResult> ProcessEntryAsync(TrackedEntry entry, CancellationToken cancellationToken = default)
+    public Task<AnalysisInvocationResult> ProcessEntryAsync(TrackedEntry entry, CancellationToken cancellationToken = default)
+    {
+        return ProcessInternalAsync(entry, existingAnalysis: null, correction: null, cancellationToken);
+    }
+
+    public Task<AnalysisInvocationResult> ProcessCorrectionAsync(TrackedEntry entry, EntryAnalysis existingAnalysis, string correction, CancellationToken cancellationToken = default)
+    {
+        if (existingAnalysis is null)
+        {
+            throw new ArgumentNullException(nameof(existingAnalysis));
+        }
+
+        if (string.IsNullOrWhiteSpace(correction))
+        {
+            _logger.LogWarning("Correction text was empty for entry {EntryId}.", entry.EntryId);
+            return Task.FromResult(AnalysisInvocationResult.Error());
+        }
+
+        return ProcessInternalAsync(entry, existingAnalysis, correction, cancellationToken);
+    }
+
+    private async Task<AnalysisInvocationResult> ProcessInternalAsync(
+        TrackedEntry entry,
+        EntryAnalysis? existingAnalysis,
+        string? correction,
+        CancellationToken cancellationToken)
     {
         if (entry is null)
         {
@@ -71,7 +97,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
                 ApiKey = apiKey
             };
 
-            var llmResult = await _llmClient.InvokeAnalysisAsync(entry, context).ConfigureAwait(false);
+            var llmResult = await _llmClient.InvokeAnalysisAsync(entry, context, existingAnalysis?.InsightsJson, correction).ConfigureAwait(false);
             if (llmResult.Analysis is null)
             {
                 _logger.LogWarning("LLM returned no analysis for entry {EntryId}.", entry.EntryId);
@@ -94,13 +120,27 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
             }
 
             llmResult.Analysis.EntryId = entry.EntryId;
+            llmResult.Analysis.CapturedAt = DateTime.UtcNow;
 
-            await _entryAnalysisRepository.AddAsync(llmResult.Analysis).ConfigureAwait(false);
+            if (existingAnalysis is null)
+            {
+                await _entryAnalysisRepository.AddAsync(llmResult.Analysis).ConfigureAwait(false);
+            }
+            else
+            {
+                llmResult.Analysis.AnalysisId = existingAnalysis.AnalysisId;
+                llmResult.Analysis.ExternalId = existingAnalysis.ExternalId;
+                await _entryAnalysisRepository.UpdateAsync(llmResult.Analysis).ConfigureAwait(false);
+            }
 
             if (llmResult.Diagnostics is not null)
             {
+                var logMessage = existingAnalysis is null
+                    ? "Stored analysis for entry {EntryId} using model {Model}. Tokens used: prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}."
+                    : "Updated analysis for entry {EntryId} using model {Model}. Tokens used: prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}.";
+
                 _logger.LogInformation(
-                    "Stored analysis for entry {EntryId} using model {Model}. Tokens used: prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}.",
+                    logMessage,
                     entry.EntryId,
                     llmResult.Analysis.Model,
                     llmResult.Diagnostics.PromptTokenCount,
