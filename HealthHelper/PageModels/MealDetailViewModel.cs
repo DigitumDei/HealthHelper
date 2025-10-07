@@ -68,12 +68,12 @@ public partial class MealDetailViewModel : ObservableObject
 
             var pathsToDelete = await ResolveFilePathsAsync(Meal).ConfigureAwait(false);
 
-            await _trackedEntryRepository.DeleteAsync(Meal.EntryId).ConfigureAwait(false);
-
             foreach (var path in pathsToDelete)
             {
                 TryDeleteFile(path, Meal.EntryId);
             }
+
+            await _trackedEntryRepository.DeleteAsync(Meal.EntryId).ConfigureAwait(false);
 
             await MainThread.InvokeOnMainThreadAsync(() => Shell.Current.GoToAsync(".."));
         }

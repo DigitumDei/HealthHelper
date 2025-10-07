@@ -199,10 +199,7 @@ public partial class MainPage : ContentPage
 
             await MainThread.InvokeOnMainThreadAsync(async () =>
             {
-                await MainThread.InvokeOnMainThreadAsync(async () =>
-                {
-                    await DisplayAlertAsync("Photo Error", "We captured a photo but couldn't import it. Please try again.", "OK");
-                });
+                await DisplayAlertAsync("Photo Error", "We captured a photo but couldn't import it. Please try again.", "OK");
             });
         }
         finally
