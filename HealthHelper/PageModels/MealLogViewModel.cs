@@ -72,7 +72,7 @@ public partial class MealLogViewModel : ObservableObject
             var entries = await _trackedEntryRepository.GetByDayAsync(DateTime.UtcNow).ConfigureAwait(false);
 
             var mealPhotos = entries
-                .Where(entry => entry.Payload is MealPayload)
+                .Where(entry => entry.BlobPath is not null && entry.Payload is MealPayload)
                 .OrderByDescending(entry => entry.CapturedAt)
                 .Select(entry =>
                 {

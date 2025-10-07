@@ -23,6 +23,7 @@ public partial class MainPage : ContentPage
     private readonly ICameraCaptureService _cameraCaptureService;
     private readonly IPendingPhotoStore _pendingPhotoStore;
     private bool _isCapturing;
+    private bool _isProcessingPending;
 
     public MainPage(
         MealLogViewModel viewModel,
@@ -148,6 +149,14 @@ public partial class MainPage : ContentPage
 
     private async Task ProcessPendingCaptureAsync()
     {
+        if (_isProcessingPending)
+        {
+            _logger.LogDebug("ProcessPendingCaptureAsync: Already running. Skipping duplicate invocation.");
+            return;
+        }
+
+        _isProcessingPending = true;
+
         PendingPhotoCapture? pending = null;
         bool finalized = false;
 
@@ -186,6 +195,10 @@ public partial class MainPage : ContentPage
             {
                 await DisplayAlertAsync("Photo Error", "We captured a photo but couldn't import it. Please try again.", "OK");
             });
+        }
+        finally
+        {
+            _isProcessingPending = false;
         }
     }
 
