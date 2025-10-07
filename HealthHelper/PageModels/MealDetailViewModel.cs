@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,6 +12,7 @@ using HealthHelper.Models;
 using HealthHelper.Services.Analysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Storage;
 
 namespace HealthHelper.PageModels;
 
@@ -63,16 +65,14 @@ public partial class MealDetailViewModel : ObservableObject
         try
         {
             _logger.LogInformation("Deleting meal entry {EntryId}.", Meal.EntryId);
+
+            var pathsToDelete = await ResolveFilePathsAsync(Meal).ConfigureAwait(false);
+
             await _trackedEntryRepository.DeleteAsync(Meal.EntryId).ConfigureAwait(false);
 
-            if (!string.IsNullOrWhiteSpace(Meal.OriginalPath) && File.Exists(Meal.OriginalPath))
+            foreach (var path in pathsToDelete)
             {
-                File.Delete(Meal.OriginalPath);
-            }
-
-            if (!string.Equals(Meal.FullPath, Meal.OriginalPath, StringComparison.OrdinalIgnoreCase) && File.Exists(Meal.FullPath))
-            {
-                File.Delete(Meal.FullPath);
+                TryDeleteFile(path, Meal.EntryId);
             }
 
             await MainThread.InvokeOnMainThreadAsync(() => Shell.Current.GoToAsync(".."));
@@ -81,6 +81,67 @@ public partial class MealDetailViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to delete meal entry {EntryId}.", Meal.EntryId);
             await MainThread.InvokeOnMainThreadAsync(() => Shell.Current.DisplayAlertAsync("Delete failed", "We couldn't delete this meal. Try again later.", "OK"));
+        }
+    }
+
+    private async Task<HashSet<string>> ResolveFilePathsAsync(MealPhoto meal)
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(meal.OriginalPath))
+        {
+            paths.Add(meal.OriginalPath);
+        }
+
+        if (!string.IsNullOrWhiteSpace(meal.FullPath))
+        {
+            paths.Add(meal.FullPath);
+        }
+
+        try
+        {
+            var trackedEntry = await _trackedEntryRepository.GetByIdAsync(meal.EntryId).ConfigureAwait(false);
+            if (trackedEntry is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(trackedEntry.BlobPath))
+                {
+                    var originalAbsolutePath = Path.Combine(FileSystem.AppDataDirectory, trackedEntry.BlobPath);
+                    paths.Add(originalAbsolutePath);
+                }
+
+                if (trackedEntry.Payload is MealPayload trackedPayload && !string.IsNullOrWhiteSpace(trackedPayload.PreviewBlobPath))
+                {
+                    var previewAbsolutePath = Path.Combine(FileSystem.AppDataDirectory, trackedPayload.PreviewBlobPath);
+                    paths.Add(previewAbsolutePath);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Unable to resolve persisted file paths for entry {EntryId} during deletion.", meal.EntryId);
+        }
+
+        return paths;
+    }
+
+    private void TryDeleteFile(string path, int entryId)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+                _logger.LogDebug("Deleted file {Path} for entry {EntryId}.", path, entryId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete file {Path} for entry {EntryId}.", path, entryId);
         }
     }
 

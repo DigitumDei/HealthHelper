@@ -30,6 +30,46 @@
 - When adding caching or logs, redact prompts and health data by default and guard debugging hooks behind compilation symbols.
 
 ## Commit & Pull Request Guidelines
-- Write commits with short, imperative subjects (e.g., “Remove aspire”) and include context when touching multiple layers.
+- Write commits with short, imperative subjects (e.g., "Remove aspire") and include context when touching multiple layers.
 - Scope diffs narrowly and call out security implications of storage or AI changes in commit bodies or PR notes.
 - For PRs, provide a summary, linked issue, UI screenshots or recordings if applicable, per-platform manual test notes, and clarity on how sensitive data stays protected.
+
+## GitHub CLI Usage
+
+### Working with Pull Requests
+- `gh pr create --title "Title" --body "Description"` - Create a new PR from current branch
+- `gh pr create` - Create PR interactively with prompts
+- `gh pr view [number]` - View PR details (omit number for current branch)
+- `gh pr diff [number]` - View PR diff
+- `gh pr list` - List all open PRs
+- `gh pr comment [number] --body "Comment text"` - Add comment to PR
+- `gh pr review [number] --approve` - Approve a PR
+- `gh pr review [number] --comment --body "Feedback"` - Add review comments
+- `gh pr merge [number]` - Merge a PR
+
+### Working with Issues
+- `gh issue create --title "Title" --body "Description"` - Create a new issue
+- `gh issue create` - Create issue interactively
+- `gh issue list` - List all open issues
+- `gh issue view [number]` - View issue details
+- `gh issue comment [number] --body "Comment"` - Add comment to issue
+- `gh issue close [number]` - Close an issue
+- `gh issue edit [number] --add-label "bug,priority:high"` - Add labels
+- `gh issue edit [number] --add-assignee @me` - Assign issue
+
+### Advanced Options
+- Use `--label`, `--assignee`, `--milestone`, `--project` flags with create commands
+- Use `--web` flag to open in browser (e.g., `gh pr view --web`)
+- Pass multi-line content via heredoc:
+  ```bash
+  gh issue create --title "Title" --body "$(cat <<'EOF'
+  Multi-line
+  description
+  EOF
+  )"
+  ```
+
+### CI/CD Integration
+- `gh pr checks [number]` - View CI check status
+- `gh run list` - List workflow runs
+- `gh run view [run-id]` - View specific workflow run details
