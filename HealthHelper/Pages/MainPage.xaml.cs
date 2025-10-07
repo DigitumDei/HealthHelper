@@ -89,7 +89,10 @@ public partial class MainPage : ContentPage
             if (!MediaPicker.Default.IsCaptureSupported)
             {
                 _logger.LogWarning("TakePhotoButton_Clicked: Camera not supported");
-                await DisplayAlertAsync("Not Supported", "Camera is not available on this device.", "OK");
+                await MainThread.InvokeOnMainThreadAsync(async () =>
+                {
+                    await DisplayAlertAsync("Not Supported", "Camera is not available on this device.", "OK");
+                });
                 return;
             }
 
@@ -107,7 +110,10 @@ public partial class MainPage : ContentPage
 
                 if (outcome.Status == CameraCaptureStatus.Failed && !string.IsNullOrWhiteSpace(outcome.ErrorMessage))
                 {
-                    await DisplayAlertAsync("Camera Error", outcome.ErrorMessage, "OK");
+                    await MainThread.InvokeOnMainThreadAsync(async () =>
+                    {
+                        await DisplayAlertAsync("Camera Error", outcome.ErrorMessage, "OK");
+                    });
                 }
 
                 return;
@@ -359,7 +365,11 @@ public partial class MainPage : ContentPage
 
         if (e.Status == ProcessingStatus.Skipped)
         {
-            bool openSettings = await DisplayAlertAsync("Connect LLM", "An API key is required for analysis. Please add one in settings.", "Open Settings", "Dismiss");
+            bool openSettings = await MainThread.InvokeOnMainThreadAsync(() => DisplayAlertAsync(
+                "Connect LLM",
+                "An API key is required for analysis. Please add one in settings.",
+                "Open Settings",
+                "Dismiss"));
             if (openSettings)
             {
                 await Shell.Current.GoToAsync(nameof(SettingsPage));
@@ -374,7 +384,10 @@ public partial class MainPage : ContentPage
         {
             if (Permissions.ShouldShowRationale<Permissions.Camera>())
             {
-                await DisplayAlertAsync("Permissions", "Camera access is required to take a photo.", "OK");
+                await MainThread.InvokeOnMainThreadAsync(async () =>
+                {
+                    await DisplayAlertAsync("Permissions", "Camera access is required to take a photo.", "OK");
+                });
             }
 
             cameraStatus = await Permissions.RequestAsync<Permissions.Camera>();
