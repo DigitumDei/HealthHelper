@@ -65,7 +65,12 @@ public partial class MealDetailViewModel : ObservableObject
             _logger.LogInformation("Deleting meal entry {EntryId}.", Meal.EntryId);
             await _trackedEntryRepository.DeleteAsync(Meal.EntryId).ConfigureAwait(false);
 
-            if (File.Exists(Meal.FullPath))
+            if (!string.IsNullOrWhiteSpace(Meal.OriginalPath) && File.Exists(Meal.OriginalPath))
+            {
+                File.Delete(Meal.OriginalPath);
+            }
+
+            if (!string.Equals(Meal.FullPath, Meal.OriginalPath, StringComparison.OrdinalIgnoreCase) && File.Exists(Meal.FullPath))
             {
                 File.Delete(Meal.FullPath);
             }

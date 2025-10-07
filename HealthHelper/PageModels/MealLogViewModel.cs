@@ -77,9 +77,20 @@ public partial class MealLogViewModel : ObservableObject
                 .Select(entry =>
                 {
                     var mealPayload = (MealPayload)entry.Payload!;
-                    var fullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath!);
-                    return new MealPhoto(entry.EntryId, fullPath, mealPayload.Description ?? string.Empty, entry.CapturedAt, entry.ProcessingStatus);
+                    var originalRelativePath = entry.BlobPath;
+                    var displayPathRelative = mealPayload.PreviewBlobPath ?? originalRelativePath;
+
+                    if (string.IsNullOrWhiteSpace(originalRelativePath) || string.IsNullOrWhiteSpace(displayPathRelative))
+                    {
+                        _logger.LogWarning("Skipping entry {EntryId} because file paths are missing.", entry.EntryId);
+                        return null;
+                    }
+
+                    var displayFullPath = Path.Combine(FileSystem.AppDataDirectory, displayPathRelative);
+                    var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, originalRelativePath);
+                    return new MealPhoto(entry.EntryId, displayFullPath, originalFullPath, mealPayload.Description ?? string.Empty, entry.CapturedAt, entry.ProcessingStatus);
                 })
+                .OfType<MealPhoto>()
                 .ToList();
 
             await MainThread.InvokeOnMainThreadAsync(() =>
@@ -101,10 +112,25 @@ public partial class MealLogViewModel : ObservableObject
     public async Task AddPendingEntryAsync(TrackedEntry entry)
     {
         var mealPayload = (MealPayload)entry.Payload!;
-        var fullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath!);
+        if (string.IsNullOrWhiteSpace(entry.BlobPath))
+        {
+            _logger.LogWarning("AddPendingEntryAsync: Missing original blob path for entry {EntryId}.", entry.EntryId);
+            return;
+        }
+
+        var displayRelativePath = mealPayload.PreviewBlobPath ?? entry.BlobPath;
+        if (string.IsNullOrWhiteSpace(displayRelativePath))
+        {
+            _logger.LogWarning("AddPendingEntryAsync: Missing display blob path for entry {EntryId}.", entry.EntryId);
+            return;
+        }
+
+        var fullPath = Path.Combine(FileSystem.AppDataDirectory, displayRelativePath);
+        var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
         var mealPhoto = new MealPhoto(
             entry.EntryId,
             fullPath,
+            originalFullPath,
             mealPayload.Description ?? string.Empty,
             entry.CapturedAt,
             entry.ProcessingStatus);
