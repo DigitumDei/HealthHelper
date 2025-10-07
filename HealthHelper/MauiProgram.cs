@@ -3,6 +3,7 @@ using CommunityToolkit.Maui;
 using HealthHelper.Data;
 using HealthHelper.Services.Analysis;
 using HealthHelper.Services.Logging;
+using HealthHelper.Services.Media;
 using HealthHelper.Services.Llm;
 using Microsoft.Maui.Storage;
 using Microsoft.EntityFrameworkCore;
@@ -48,6 +49,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<ILogFileService>(_ => new LogFileService(logFilePath));
         builder.Services.AddSingleton<IBackgroundAnalysisService, BackgroundAnalysisService>();
         builder.Services.AddScoped<IStaleEntryRecoveryService, StaleEntryRecoveryService>();
+        builder.Services.AddSingleton<IPendingPhotoStore, FilePendingPhotoStore>();
+
+#if ANDROID
+        builder.Services.AddSingleton<IPhotoResizer, AndroidPhotoResizer>();
+        builder.Services.AddSingleton<ICameraCaptureService, AndroidCameraCaptureService>();
+#else
+        builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
+        builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
+#endif
 
 
         builder.Services.AddTransient<MealLogViewModel>();

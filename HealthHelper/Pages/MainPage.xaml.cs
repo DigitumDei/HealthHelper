@@ -6,6 +6,7 @@ using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.PageModels;
 using HealthHelper.Services.Analysis;
+using HealthHelper.Services.Media;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Media;
@@ -18,18 +19,28 @@ public partial class MainPage : ContentPage
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly ILogger<MainPage> _logger;
+    private readonly IPhotoResizer _photoResizer;
+    private readonly ICameraCaptureService _cameraCaptureService;
+    private readonly IPendingPhotoStore _pendingPhotoStore;
+    private bool _isCapturing;
 
     public MainPage(
         MealLogViewModel viewModel,
         ITrackedEntryRepository trackedEntryRepository,
         IBackgroundAnalysisService backgroundAnalysisService,
-        ILogger<MainPage> logger)
+        ILogger<MainPage> logger,
+        IPhotoResizer photoResizer,
+        ICameraCaptureService cameraCaptureService,
+        IPendingPhotoStore pendingPhotoStore)
     {
         InitializeComponent();
         BindingContext = viewModel;
         _trackedEntryRepository = trackedEntryRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
         _logger = logger;
+        _photoResizer = photoResizer;
+        _cameraCaptureService = cameraCaptureService;
+        _pendingPhotoStore = pendingPhotoStore;
     }
 
     protected override async void OnAppearing()
@@ -40,6 +51,8 @@ public partial class MainPage : ContentPage
         {
             await vm.LoadEntriesAsync();
         }
+
+        await ProcessPendingCaptureAsync();
     }
 
     protected override void OnDisappearing()
@@ -50,9 +63,21 @@ public partial class MainPage : ContentPage
 
     private async void TakePhotoButton_Clicked(object sender, EventArgs e)
     {
+        if (_isCapturing)
+        {
+            _logger.LogInformation("TakePhotoButton_Clicked: Capture already in progress.");
+            return;
+        }
+
+        PendingPhotoCapture? capture = null;
+        bool captureFinalized = false;
+
         try
         {
+            _isCapturing = true;
             _logger.LogInformation("TakePhotoButton_Clicked: Starting photo capture");
+
+            await ProcessPendingCaptureAsync();
 
             if (!await EnsureCameraPermissionsAsync())
             {
@@ -67,74 +92,42 @@ public partial class MainPage : ContentPage
                 return;
             }
 
+            capture = CreatePendingCaptureMetadata();
+            await _pendingPhotoStore.SaveAsync(capture);
+
             _logger.LogInformation("TakePhotoButton_Clicked: Launching camera");
+            var outcome = await _cameraCaptureService.CaptureAsync(capture);
 
-            // Try-catch specifically for MediaPicker which can cause process termination
-            FileResult? photo = null;
-            try
+            if (outcome.Status != CameraCaptureStatus.Success)
             {
-                photo = await MediaPicker.Default.CapturePhotoAsync();
-            }
-            catch (Exception cameraEx)
-            {
-                // If we get here, app wasn't killed but camera failed
-                _logger.LogError(cameraEx, "TakePhotoButton_Clicked: Camera capture failed with exception");
-                await MainThread.InvokeOnMainThreadAsync(async () =>
+                _logger.LogInformation("TakePhotoButton_Clicked: Camera capture did not succeed (Status: {Status}).", outcome.Status);
+                CleanupCaptureFiles(capture);
+                await _pendingPhotoStore.ClearAsync();
+
+                if (outcome.Status == CameraCaptureStatus.Failed && !string.IsNullOrWhiteSpace(outcome.ErrorMessage))
                 {
-                    await DisplayAlertAsync("Camera Error", "Failed to capture photo. Please try again.", "OK");
-                });
-                return;
-            }
-
-            if (photo is null)
-            {
-                _logger.LogInformation("TakePhotoButton_Clicked: User cancelled photo capture or app was restarted");
-                return;
-            }
-
-            _logger.LogInformation("TakePhotoButton_Clicked: Photo captured successfully, saving to disk");
-            string mealPhotosDir = Path.Combine(FileSystem.AppDataDirectory, "Entries", "Meal");
-            Directory.CreateDirectory(mealPhotosDir);
-            string uniqueFileName = $"{Guid.NewGuid()}.jpg";
-            string persistentFilePath = Path.Combine(mealPhotosDir, uniqueFileName);
-
-            await using (Stream sourceStream = await photo.OpenReadAsync())
-            {
-                await using (FileStream localFileStream = File.Create(persistentFilePath))
-                {
-                    await sourceStream.CopyToAsync(localFileStream);
+                    await DisplayAlertAsync("Camera Error", outcome.ErrorMessage, "OK");
                 }
+
+                return;
             }
 
-            _logger.LogInformation("TakePhotoButton_Clicked: Photo saved, creating database entry");
-            var newEntry = new Models.TrackedEntry
-            {
-                EntryType = "Meal",
-                CapturedAt = DateTime.UtcNow,
-                BlobPath = Path.Combine("Entries", "Meal", uniqueFileName),
-                Payload = new Models.MealPayload { Description = "New meal photo" },
-                DataSchemaVersion = 1,
-                ProcessingStatus = ProcessingStatus.Pending
-            };
-
-            await _trackedEntryRepository.AddAsync(newEntry);
-            _logger.LogInformation("TakePhotoButton_Clicked: Database entry created with ID {EntryId}", newEntry.EntryId);
-
-            if (BindingContext is MealLogViewModel vm)
-            {
-                _logger.LogInformation("TakePhotoButton_Clicked: Adding entry to UI");
-                await vm.AddPendingEntryAsync(newEntry);
-            }
-
-            _logger.LogInformation("TakePhotoButton_Clicked: Queueing background analysis");
-            await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId);
+            _logger.LogInformation("TakePhotoButton_Clicked: Camera capture returned, finalising photo");
+            await FinalizePhotoCaptureAsync(capture);
+            captureFinalized = true;
+            await _pendingPhotoStore.ClearAsync();
             _logger.LogInformation("TakePhotoButton_Clicked: Photo capture completed successfully");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "TakePhotoButton_Clicked: FATAL ERROR during photo capture");
 
-            // Use MainThread to ensure UI call succeeds
+            if (capture is not null && !captureFinalized)
+            {
+                CleanupCaptureFiles(capture);
+                await _pendingPhotoStore.ClearAsync();
+            }
+
             try
             {
                 await MainThread.InvokeOnMainThreadAsync(async () =>
@@ -145,6 +138,158 @@ public partial class MainPage : ContentPage
             catch (Exception alertEx)
             {
                 _logger.LogError(alertEx, "TakePhotoButton_Clicked: Failed to display error alert");
+            }
+        }
+        finally
+        {
+            _isCapturing = false;
+        }
+    }
+
+    private async Task ProcessPendingCaptureAsync()
+    {
+        PendingPhotoCapture? pending = null;
+        bool finalized = false;
+
+        try
+        {
+            pending = await _pendingPhotoStore.GetAsync();
+            if (pending is null)
+            {
+                return;
+            }
+
+            if (!File.Exists(pending.OriginalAbsolutePath))
+            {
+                _logger.LogWarning("Pending photo capture missing original file at {Path}. Clearing pending state.", pending.OriginalAbsolutePath);
+                CleanupCaptureFiles(pending);
+                await _pendingPhotoStore.ClearAsync();
+                return;
+            }
+
+            _logger.LogInformation("Processing pending photo captured at {CapturedAtUtc}.", pending.CapturedAtUtc);
+            await FinalizePhotoCaptureAsync(pending);
+            finalized = true;
+            await _pendingPhotoStore.ClearAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process pending photo capture.");
+
+            if (pending is not null && !finalized)
+            {
+                CleanupCaptureFiles(pending);
+                await _pendingPhotoStore.ClearAsync();
+            }
+
+            await MainThread.InvokeOnMainThreadAsync(async () =>
+            {
+                await DisplayAlertAsync("Photo Error", "We captured a photo but couldn't import it. Please try again.", "OK");
+            });
+        }
+    }
+
+    private PendingPhotoCapture CreatePendingCaptureMetadata()
+    {
+        string relativeDirectory = Path.Combine("Entries", "Meal");
+        string mealPhotosDir = Path.Combine(FileSystem.AppDataDirectory, relativeDirectory);
+        Directory.CreateDirectory(mealPhotosDir);
+
+        string originalFileName = $"{Guid.NewGuid()}.jpg";
+        string previewFileName = $"{Path.GetFileNameWithoutExtension(originalFileName)}_preview.jpg";
+
+        return new PendingPhotoCapture
+        {
+            OriginalRelativePath = Path.Combine(relativeDirectory, originalFileName),
+            PreviewRelativePath = Path.Combine(relativeDirectory, previewFileName),
+            CapturedAtUtc = DateTime.UtcNow
+        };
+    }
+
+    private async Task FinalizePhotoCaptureAsync(PendingPhotoCapture capture)
+    {
+        string originalPath = capture.OriginalAbsolutePath;
+        string previewPath = capture.PreviewAbsolutePath;
+
+        if (!File.Exists(originalPath))
+        {
+            throw new FileNotFoundException("Captured photo file is missing.", originalPath);
+        }
+
+        if (new FileInfo(originalPath).Length == 0)
+        {
+            throw new InvalidOperationException("Captured photo file is empty.");
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(previewPath)!);
+
+        File.Copy(originalPath, previewPath, overwrite: true);
+        _logger.LogInformation("FinalizePhotoCaptureAsync: Preview copy refreshed at {PreviewPath}", previewPath);
+
+        await _photoResizer.ResizeAsync(previewPath, 1280, 1280);
+        _logger.LogInformation("FinalizePhotoCaptureAsync: Preview resized");
+
+        var newEntry = new TrackedEntry
+        {
+            EntryType = "Meal",
+            CapturedAt = capture.CapturedAtUtc,
+            BlobPath = capture.OriginalRelativePath,
+            Payload = new MealPayload
+            {
+                Description = "New meal photo",
+                PreviewBlobPath = capture.PreviewRelativePath
+            },
+            DataSchemaVersion = 1,
+            ProcessingStatus = ProcessingStatus.Pending
+        };
+
+        await _trackedEntryRepository.AddAsync(newEntry);
+        _logger.LogInformation("FinalizePhotoCaptureAsync: Database entry created with ID {EntryId}", newEntry.EntryId);
+
+        if (BindingContext is MealLogViewModel vm)
+        {
+            try
+            {
+                await vm.AddPendingEntryAsync(newEntry);
+            }
+            catch (Exception uiEx)
+            {
+                _logger.LogError(uiEx, "FinalizePhotoCaptureAsync: Failed to add entry {EntryId} to UI collection.", newEntry.EntryId);
+            }
+        }
+
+        try
+        {
+            await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId);
+            _logger.LogInformation("FinalizePhotoCaptureAsync: Entry queued for background analysis");
+        }
+        catch (Exception queueEx)
+        {
+            _logger.LogError(queueEx, "FinalizePhotoCaptureAsync: Failed to queue background analysis for entry {EntryId}.", newEntry.EntryId);
+            await MainThread.InvokeOnMainThreadAsync(async () =>
+            {
+                await DisplayAlertAsync("Analysis Delayed", "We saved your photo but couldn't start the analysis yet. Please retry from the meal card.", "OK");
+            });
+        }
+    }
+
+    private static void CleanupCaptureFiles(PendingPhotoCapture capture)
+    {
+        TryDelete(capture.OriginalAbsolutePath);
+        TryDelete(capture.PreviewAbsolutePath);
+
+        static void TryDelete(string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+            catch
+            {
+                // ignore clean-up failures
             }
         }
     }
