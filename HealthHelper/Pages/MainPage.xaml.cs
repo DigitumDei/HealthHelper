@@ -256,33 +256,49 @@ public partial class MainPage : ContentPage
             ProcessingStatus = ProcessingStatus.Pending
         };
 
-        await _trackedEntryRepository.AddAsync(newEntry);
-        _logger.LogInformation("FinalizePhotoCaptureAsync: Database entry created with ID {EntryId}", newEntry.EntryId);
-
-        if (BindingContext is MealLogViewModel vm)
-        {
-            try
-            {
-                await vm.AddPendingEntryAsync(newEntry);
-            }
-            catch (Exception uiEx)
-            {
-                _logger.LogError(uiEx, "FinalizePhotoCaptureAsync: Failed to add entry {EntryId} to UI collection.", newEntry.EntryId);
-            }
-        }
+        bool entryPersisted = false;
 
         try
         {
-            await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId);
-            _logger.LogInformation("FinalizePhotoCaptureAsync: Entry queued for background analysis");
-        }
-        catch (Exception queueEx)
-        {
-            _logger.LogError(queueEx, "FinalizePhotoCaptureAsync: Failed to queue background analysis for entry {EntryId}.", newEntry.EntryId);
-            await MainThread.InvokeOnMainThreadAsync(async () =>
+            await _trackedEntryRepository.AddAsync(newEntry);
+            entryPersisted = true;
+            _logger.LogInformation("FinalizePhotoCaptureAsync: Database entry created with ID {EntryId}", newEntry.EntryId);
+
+            if (BindingContext is MealLogViewModel vm)
             {
-                await DisplayAlertAsync("Analysis Delayed", "We saved your photo but couldn't start the analysis yet. Please retry from the meal card.", "OK");
-            });
+                try
+                {
+                    await vm.AddPendingEntryAsync(newEntry);
+                }
+                catch (Exception uiEx)
+                {
+                    _logger.LogError(uiEx, "FinalizePhotoCaptureAsync: Failed to add entry {EntryId} to UI collection.", newEntry.EntryId);
+                }
+            }
+
+            try
+            {
+                await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId);
+                _logger.LogInformation("FinalizePhotoCaptureAsync: Entry queued for background analysis");
+            }
+            catch (Exception queueEx)
+            {
+                _logger.LogError(queueEx, "FinalizePhotoCaptureAsync: Failed to queue background analysis for entry {EntryId}.", newEntry.EntryId);
+                await MainThread.InvokeOnMainThreadAsync(async () =>
+                {
+                    await DisplayAlertAsync("Analysis Delayed", "We saved your photo but couldn't start the analysis yet. Please retry from the meal card.", "OK");
+                });
+            }
+        }
+        catch
+        {
+            if (entryPersisted)
+            {
+                _logger.LogWarning("FinalizePhotoCaptureAsync: Rolling back database entry {EntryId} due to failure.", newEntry.EntryId);
+                await _trackedEntryRepository.DeleteAsync(newEntry.EntryId);
+            }
+
+            throw;
         }
     }
 
