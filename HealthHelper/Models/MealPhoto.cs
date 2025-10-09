@@ -10,6 +10,19 @@ public partial class MealPhoto : ObservableObject
     public string Description { get; init; }
     public DateTime CapturedAt { get; init; }
 
+    public DateTime LocalCapturedAt
+    {
+        get
+        {
+            return CapturedAt.Kind switch
+            {
+                DateTimeKind.Utc => CapturedAt.ToLocalTime(),
+                DateTimeKind.Unspecified => DateTime.SpecifyKind(CapturedAt, DateTimeKind.Utc).ToLocalTime(),
+                _ => CapturedAt
+            };
+        }
+    }
+
     [ObservableProperty]
     private ProcessingStatus processingStatus;
 

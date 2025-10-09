@@ -136,7 +136,7 @@
                                 <VerticalStackLayout Padding="16" VerticalOptions="Start" Grid.Row="1" Spacing="4">
                                     <Label Text="Meal captured"
                                            Style="{StaticResource Body2Strong}" />
-                                    <Label Text="{Binding CapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}"
+                                    <Label Text="{Binding LocalCapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}"
                                            Style="{StaticResource Caption1}" />
                                 </VerticalStackLayout>
                             </Grid>
