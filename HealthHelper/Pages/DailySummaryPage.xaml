@@ -40,7 +40,8 @@
                     <Label Text="Nutrition Totals"
                            Style="{StaticResource Body2Strong}" />
                     <Label Text="{Binding TotalsSummary}"
-                           Style="{StaticResource Body1}" />
+                           Style="{StaticResource Body1}"
+                           LineBreakMode="WordWrap" />
                 </VerticalStackLayout>
             </Border>
 
@@ -69,7 +70,8 @@
                 <BindableLayout.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
                         <Label Text="{Binding .}"
-                               Style="{StaticResource Body1}" />
+                               Style="{StaticResource Body1}"
+                               LineBreakMode="WordWrap" />
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
                 <BindableLayout.EmptyView>
@@ -85,7 +87,8 @@
                 <BindableLayout.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
                         <Label Text="{Binding .}"
-                               Style="{StaticResource Body1}" />
+                               Style="{StaticResource Body1}"
+                               LineBreakMode="WordWrap" />
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
                 <BindableLayout.EmptyView>

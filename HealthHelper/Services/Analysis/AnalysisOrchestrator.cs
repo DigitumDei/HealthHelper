@@ -17,6 +17,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
 
     private readonly IAppSettingsRepository _appSettingsRepository;
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
+    private readonly IDailySummaryService _dailySummaryService;
     private readonly ILLmClient _llmClient;
     private readonly MealAnalysisValidator _validator;
     private readonly ILogger<AnalysisOrchestrator> _logger;
@@ -24,12 +25,14 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
     public AnalysisOrchestrator(
         IAppSettingsRepository appSettingsRepository,
         IEntryAnalysisRepository entryAnalysisRepository,
+        IDailySummaryService dailySummaryService,
         ILLmClient llmClient,
         MealAnalysisValidator validator,
         ILogger<AnalysisOrchestrator> logger)
     {
         _appSettingsRepository = appSettingsRepository;
         _entryAnalysisRepository = entryAnalysisRepository;
+        _dailySummaryService = dailySummaryService;
         _llmClient = llmClient;
         _validator = validator;
         _logger = logger;
@@ -37,7 +40,17 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
 
     public Task<AnalysisInvocationResult> ProcessEntryAsync(TrackedEntry entry, CancellationToken cancellationToken = default)
     {
-        return ProcessInternalAsync(entry, existingAnalysis: null, correction: null, cancellationToken);
+        if (entry is null)
+        {
+            throw new ArgumentNullException(nameof(entry));
+        }
+
+        if (string.Equals(entry.EntryType, "DailySummary", StringComparison.OrdinalIgnoreCase))
+        {
+            return _dailySummaryService.GenerateAsync(entry, cancellationToken);
+        }
+
+        return ProcessMealEntryAsync(entry, existingAnalysis: null, correction: null, cancellationToken);
     }
 
     public Task<AnalysisInvocationResult> ProcessCorrectionAsync(TrackedEntry entry, EntryAnalysis existingAnalysis, string correction, CancellationToken cancellationToken = default)
@@ -53,10 +66,16 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
             return Task.FromResult(AnalysisInvocationResult.Error());
         }
 
-        return ProcessInternalAsync(entry, existingAnalysis, correction, cancellationToken);
+        if (string.Equals(entry.EntryType, "DailySummary", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Corrections are not supported for daily summary entries ({EntryId}).", entry.EntryId);
+            return Task.FromResult(AnalysisInvocationResult.Error());
+        }
+
+        return ProcessMealEntryAsync(entry, existingAnalysis, correction, cancellationToken);
     }
 
-    private async Task<AnalysisInvocationResult> ProcessInternalAsync(
+    private async Task<AnalysisInvocationResult> ProcessMealEntryAsync(
         TrackedEntry entry,
         EntryAnalysis? existingAnalysis,
         string? correction,

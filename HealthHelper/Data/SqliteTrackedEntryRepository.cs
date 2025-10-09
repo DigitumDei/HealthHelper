@@ -107,8 +107,19 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         entry.Payload = entry.EntryType switch
         {
             "Meal" => JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload(),
-            "DailySummary" => JsonSerializer.Deserialize<DailySummaryPayload>(entry.DataPayload) ?? new DailySummaryPayload(),
+            "DailySummary" => NormalizeDailySummaryPayload(JsonSerializer.Deserialize<DailySummaryPayload>(entry.DataPayload)),
             _ => entry.Payload
         };
+    }
+
+    private static DailySummaryPayload NormalizeDailySummaryPayload(DailySummaryPayload? payload)
+    {
+        payload ??= new DailySummaryPayload();
+        if (payload.SchemaVersion == 0)
+        {
+            payload.SchemaVersion = 1;
+        }
+
+        return payload;
     }
 }

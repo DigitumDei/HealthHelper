@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -85,9 +86,9 @@ public partial class DailySummaryViewModel : ObservableObject
 
         try
         {
-            IsBusy = true;
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
+                IsBusy = true;
                 StatusMessage = string.Empty;
                 Insights.Clear();
                 Recommendations.Clear();
@@ -105,14 +106,14 @@ public partial class DailySummaryViewModel : ObservableObject
             {
                 ProcessingStatus = entry.ProcessingStatus;
 
-                if (entry.Payload is DailySummaryPayload payload)
-                {
-                    GeneratedAtText = $"Generated {payload.GeneratedAt.ToLocalTime():MMM d, h:mm tt}";
-                }
-                else
-                {
-                    GeneratedAtText = $"Generated {entry.CapturedAt.ToLocalTime():MMM d, h:mm tt}";
-                }
+                var generatedAtUtc = entry.Payload is DailySummaryPayload payload && payload.GeneratedAt != default
+                    ? payload.GeneratedAt
+                    : entry.CapturedAt;
+
+                GeneratedAtText = string.Format(
+                    CultureInfo.CurrentCulture,
+                    "Generated {0}",
+                    generatedAtUtc.ToLocalTime().ToString("f", CultureInfo.CurrentCulture));
             });
 
             var analysis = await _entryAnalysisRepository.GetByTrackedEntryIdAsync(SummaryEntryId).ConfigureAwait(false);
@@ -158,7 +159,7 @@ public partial class DailySummaryViewModel : ObservableObject
         }
         finally
         {
-            IsBusy = false;
+            await MainThread.InvokeOnMainThreadAsync(() => IsBusy = false);
         }
     }
 
@@ -229,19 +230,24 @@ public partial class DailySummaryViewModel : ObservableObject
                 .ConfigureAwait(false);
             var mealCount = mealEntries.Count();
 
-            entry.Payload = new DailySummaryPayload
+            var payload = new DailySummaryPayload
             {
+                SchemaVersion = 1,
                 MealCount = mealCount,
                 GeneratedAt = DateTime.UtcNow
             };
+            entry.Payload = payload;
             entry.CapturedAt = DateTime.UtcNow;
             entry.ProcessingStatus = ProcessingStatus.Pending;
-            entry.DataSchemaVersion = entry.DataSchemaVersion == 0 ? 1 : entry.DataSchemaVersion;
+            entry.DataSchemaVersion = payload.SchemaVersion;
 
             await _trackedEntryRepository.UpdateAsync(entry).ConfigureAwait(false);
 
-            ProcessingStatus = ProcessingStatus.Pending;
-            StatusMessage = "Regenerating summary...";
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                ProcessingStatus = ProcessingStatus.Pending;
+                StatusMessage = "Regenerating summary...";
+            });
 
             await _backgroundAnalysisService.QueueEntryAsync(entry.EntryId).ConfigureAwait(false);
 

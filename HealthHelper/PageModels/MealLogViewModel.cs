@@ -21,6 +21,7 @@ public partial class MealLogViewModel : ObservableObject
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly ILogger<MealLogViewModel> _logger;
+    private readonly SemaphoreSlim _summaryCardLock = new(1, 1);
     public ObservableCollection<MealPhoto> Meals { get; } = new();
 
     [ObservableProperty]
@@ -93,9 +94,15 @@ public partial class MealLogViewModel : ObservableObject
         try
         {
             IsGeneratingSummary = true;
-            var mealCountSnapshot = Meals.Count;
+
+            var mealsForDay = await _trackedEntryRepository
+                .GetByEntryTypeAndDayAsync("Meal", DateTime.UtcNow)
+                .ConfigureAwait(false);
+
+            var mealCountSnapshot = mealsForDay.Count();
             var summaryPayload = new DailySummaryPayload
             {
+                SchemaVersion = 1,
                 MealCount = mealCountSnapshot,
                 GeneratedAt = DateTime.UtcNow
             };
@@ -129,19 +136,22 @@ public partial class MealLogViewModel : ObservableObject
                 existingSummary.Payload = summaryPayload;
                 existingSummary.CapturedAt = DateTime.UtcNow;
                 existingSummary.ProcessingStatus = ProcessingStatus.Pending;
-                existingSummary.DataSchemaVersion = existingSummary.DataSchemaVersion == 0 ? 1 : existingSummary.DataSchemaVersion;
+                existingSummary.DataSchemaVersion = summaryPayload.SchemaVersion;
 
                 await _trackedEntryRepository.UpdateAsync(existingSummary).ConfigureAwait(false);
                 summaryEntry = existingSummary;
             }
 
-            await MainThread.InvokeOnMainThreadAsync(() =>
+            await WithSummaryCardLockAsync(async () =>
             {
-                SummaryCard ??= new DailySummaryCard(summaryEntry.EntryId, summaryPayload.MealCount, summaryPayload.GeneratedAt, summaryEntry.ProcessingStatus);
-                SummaryCard.RefreshMetadata(summaryPayload.MealCount, summaryPayload.GeneratedAt);
-                SummaryCard.ProcessingStatus = ProcessingStatus.Pending;
-                SummaryCard.IsOutdated = false;
-                GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+                await MainThread.InvokeOnMainThreadAsync(() =>
+                {
+                    SummaryCard ??= new DailySummaryCard(summaryEntry.EntryId, summaryPayload.MealCount, summaryPayload.GeneratedAt, summaryEntry.ProcessingStatus);
+                    SummaryCard.RefreshMetadata(summaryPayload.MealCount, summaryPayload.GeneratedAt);
+                    SummaryCard.ProcessingStatus = ProcessingStatus.Pending;
+                    SummaryCard.IsOutdated = false;
+                    GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+                });
             });
 
             await _backgroundAnalysisService.QueueEntryAsync(summaryEntry.EntryId).ConfigureAwait(false);
@@ -258,27 +268,33 @@ public partial class MealLogViewModel : ObservableObject
                 {
                     Meals.Add(mealPhoto);
                 }
+            });
 
-                if (summaryCard is not null)
+            await WithSummaryCardLockAsync(async () =>
+            {
+                await MainThread.InvokeOnMainThreadAsync(() =>
                 {
-                    var isNewCard = SummaryCard is null || SummaryCard.EntryId != summaryCard.EntryId;
-                    if (isNewCard)
+                    if (summaryCard is not null)
                     {
-                        SummaryCard = summaryCard;
+                        var isNewCard = SummaryCard is null || SummaryCard.EntryId != summaryCard.EntryId;
+                        if (isNewCard)
+                        {
+                            SummaryCard = summaryCard;
+                        }
+                        else if (SummaryCard is not null)
+                        {
+                            SummaryCard.RefreshMetadata(summaryCard.MealCount, summaryCard.GeneratedAt);
+                            SummaryCard.ProcessingStatus = summaryCard.ProcessingStatus;
+                        }
                     }
-                    else if (SummaryCard is not null)
+                    else
                     {
-                        SummaryCard.RefreshMetadata(summaryCard.MealCount, summaryCard.GeneratedAt);
-                        SummaryCard.ProcessingStatus = summaryCard.ProcessingStatus;
+                        SummaryCard = null;
                     }
-                }
-                else
-                {
-                    SummaryCard = null;
-                }
 
-                UpdateSummaryOutdatedFlag(mealEntries.Count);
-                GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+                    UpdateSummaryOutdatedFlag(mealEntries.Count);
+                    GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+                });
             });
         }
         catch (Exception ex)
@@ -317,7 +333,11 @@ public partial class MealLogViewModel : ObservableObject
         await MainThread.InvokeOnMainThreadAsync(() =>
         {
             Meals.Insert(0, mealPhoto);
-            UpdateSummaryOutdatedFlag(Meals.Count);
+        });
+
+        await WithSummaryCardLockAsync(async () =>
+        {
+            await MainThread.InvokeOnMainThreadAsync(() => UpdateSummaryOutdatedFlag(Meals.Count));
         });
     }
 
@@ -329,30 +349,29 @@ public partial class MealLogViewModel : ObservableObject
             if (existingEntry is not null)
             {
                 existingEntry.ProcessingStatus = newStatus;
-                UpdateSummaryOutdatedFlag(Meals.Count);
-                return;
             }
+        });
 
-            if (SummaryCard is not null && SummaryCard.EntryId == entryId)
+        await WithSummaryCardLockAsync(async () =>
+        {
+            await MainThread.InvokeOnMainThreadAsync(() =>
             {
+                if (SummaryCard is null || SummaryCard.EntryId != entryId)
+                {
+                    UpdateSummaryOutdatedFlag(Meals.Count);
+                    return;
+                }
+
                 SummaryCard.ProcessingStatus = newStatus;
 
                 if (newStatus == ProcessingStatus.Completed)
                 {
-                    SummaryCard.RefreshMetadata(SummaryCard.MealCount, DateTime.UtcNow);
+                    SummaryCard.RefreshMetadata(Meals.Count, DateTime.UtcNow);
                 }
 
-                if (newStatus is ProcessingStatus.Pending or ProcessingStatus.Processing)
-                {
-                    SummaryCard.IsOutdated = false;
-                }
-                else
-                {
-                    UpdateSummaryOutdatedFlag(Meals.Count);
-                }
-
+                UpdateSummaryOutdatedFlag(Meals.Count);
                 GenerateDailySummaryCommand.NotifyCanExecuteChanged();
-            }
+            });
         });
     }
 
@@ -363,8 +382,26 @@ public partial class MealLogViewModel : ObservableObject
             return;
         }
 
-        var shouldFlag = SummaryCard.ProcessingStatus == ProcessingStatus.Completed && currentMealCount > SummaryCard.MealCount;
-        SummaryCard.IsOutdated = shouldFlag;
+        if (SummaryCard.ProcessingStatus == ProcessingStatus.Completed)
+        {
+            SummaryCard.IsOutdated = currentMealCount > SummaryCard.MealCount;
+            return;
+        }
+
+        SummaryCard.IsOutdated = SummaryCard.ProcessingStatus is ProcessingStatus.Failed or ProcessingStatus.Skipped;
+    }
+
+    private async Task WithSummaryCardLockAsync(Func<Task> action)
+    {
+        await _summaryCardLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            _summaryCardLock.Release();
+        }
     }
 
     [RelayCommand]
