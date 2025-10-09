@@ -35,6 +35,21 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         return entries;
     }
 
+    public async Task<IEnumerable<TrackedEntry>> GetByEntryTypeAndDayAsync(string entryType, DateTime date)
+    {
+        var entries = await _context.TrackedEntries
+            .AsNoTracking()
+            .Where(e => e.EntryType == entryType && e.CapturedAt.Date == date.Date)
+            .ToListAsync();
+
+        foreach (var entry in entries)
+        {
+            DeserializePayload(entry);
+        }
+
+        return entries;
+    }
+
     public async Task DeleteAsync(int entryId)
     {
         var entry = await _context.TrackedEntries.FindAsync(entryId);
@@ -67,12 +82,33 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         return entry;
     }
 
+    public async Task UpdateAsync(TrackedEntry entry)
+    {
+        var trackedEntry = await _context.TrackedEntries.FindAsync(entry.EntryId);
+        if (trackedEntry is null)
+        {
+            return;
+        }
+
+        trackedEntry.EntryType = entry.EntryType;
+        trackedEntry.CapturedAt = entry.CapturedAt;
+        trackedEntry.BlobPath = entry.BlobPath;
+        trackedEntry.DataSchemaVersion = entry.DataSchemaVersion;
+        trackedEntry.DataPayload = JsonSerializer.Serialize(entry.Payload);
+        trackedEntry.ProcessingStatus = entry.ProcessingStatus;
+        trackedEntry.ExternalId = entry.ExternalId;
+
+        await _context.SaveChangesAsync();
+        _context.Entry(trackedEntry).State = EntityState.Detached;
+    }
+
     private void DeserializePayload(TrackedEntry entry)
     {
-        // A more robust implementation would use the EntryType to deserialize to the correct type
-        if (entry.EntryType == "Meal")
+        entry.Payload = entry.EntryType switch
         {
-            entry.Payload = JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload();
-        }
+            "Meal" => JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload(),
+            "DailySummary" => JsonSerializer.Deserialize<DailySummaryPayload>(entry.DataPayload) ?? new DailySummaryPayload(),
+            _ => entry.Payload
+        };
     }
 }

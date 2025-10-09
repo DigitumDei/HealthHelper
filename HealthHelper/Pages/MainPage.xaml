@@ -14,9 +14,72 @@
                 <Label Text="Snap a photo each time you eat so your chosen LLM can summarise your day." Style="{StaticResource Body1}" />
             </VerticalStackLayout>
 
-            <Button Text="Take Photo"
-                    SemanticProperties.Description="Capture a meal photo"
-                    Clicked="TakePhotoButton_Clicked" />
+            <HorizontalStackLayout Spacing="12">
+                <Button Text="Take Photo"
+                        SemanticProperties.Description="Capture a meal photo"
+                        Clicked="TakePhotoButton_Clicked" />
+
+                <Button Text="Generate Daily Summary"
+                        Command="{Binding GenerateDailySummaryCommand}"
+                        IsVisible="{Binding ShowGenerateSummaryButton}"
+                        IsEnabled="{Binding IsGeneratingSummary, Converter={StaticResource InvertedBoolConverter}}"
+                        SemanticProperties.Description="Compile a daily nutrition summary" />
+            </HorizontalStackLayout>
+
+            <Border StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                    Padding="16"
+                    Margin="0,8,0,0"
+                    BackgroundColor="Transparent"
+                    StrokeShape="RoundRectangle 12,12,12,12"
+                    IsVisible="{Binding ShowSummaryCard}">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding ViewDailySummaryCommand}" />
+                </Border.GestureRecognizers>
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                    <Label Grid.Row="0"
+                           Text="Daily Summary"
+                           Style="{StaticResource Body2Strong}" />
+
+                    <Label Grid.Row="1"
+                           Text="{Binding SummaryCard.GeneratedAt, StringFormat='Generated {0:MMM d, h:mm tt}'}"
+                           Style="{StaticResource Caption1}" />
+
+                    <Label Grid.Row="2"
+                           Text="{Binding SummaryCard.MealCount, StringFormat='Meals included: {0}'}"
+                           Style="{StaticResource Caption1}" />
+
+                    <Label Grid.Row="3"
+                           Text="{Binding SummaryCard.ProcessingStatus, StringFormat='Status: {0}'}"
+                           Style="{StaticResource Caption1}" />
+
+                    <Label Grid.Row="4"
+                           Text="Tap to view summary"
+                           Style="{StaticResource Caption1}" />
+
+                    <StackLayout Grid.Column="1"
+                                 Grid.RowSpan="5"
+                                 HorizontalOptions="End"
+                                 VerticalOptions="Center"
+                                 Spacing="8">
+                        <ActivityIndicator IsRunning="True"
+                                           Color="{StaticResource Primary}"
+                                           IsVisible="{Binding SummaryCard.ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
+                        <Label Text="Outdated"
+                               TextColor="Orange"
+                               FontAttributes="Bold"
+                               IsVisible="{Binding SummaryCard.IsOutdated}" />
+                        <Label Text="Failed"
+                               TextColor="{StaticResource Error}"
+                               FontAttributes="Bold"
+                               IsVisible="{Binding SummaryCard.ProcessingStatus, Converter={StaticResource IsFailedConverter}}" />
+                        <Label Text="Skipped"
+                               TextColor="{StaticResource Gray500}"
+                               FontAttributes="Bold"
+                               IsVisible="{Binding SummaryCard.ProcessingStatus, Converter={StaticResource IsSkippedConverter}}" />
+                    </StackLayout>
+                </Grid>
+            </Border>
 
             <CollectionView ItemsSource="{Binding Meals}"
                             Margin="0,8,0,0"

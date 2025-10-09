@@ -41,6 +41,7 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
             using var scope = _scopeFactory.CreateScope();
             var entryRepository = scope.ServiceProvider.GetRequiredService<ITrackedEntryRepository>();
             var orchestrator = scope.ServiceProvider.GetRequiredService<IAnalysisOrchestrator>();
+            var dailySummaryService = scope.ServiceProvider.GetRequiredService<IDailySummaryService>();
 
             try
             {
@@ -68,7 +69,17 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
                     return;
                 }
 
-                var result = await orchestrator.ProcessEntryAsync(entry, cancellationToken);
+                AnalysisInvocationResult result;
+
+                if (string.Equals(entry.EntryType, "DailySummary", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogInformation("Processing daily summary entry {EntryId}.", entryId);
+                    result = await dailySummaryService.GenerateAsync(entry, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    result = await orchestrator.ProcessEntryAsync(entry, cancellationToken).ConfigureAwait(false);
+                }
 
                 // Check cancellation after LLM call
                 if (cancellationToken.IsCancellationRequested)
