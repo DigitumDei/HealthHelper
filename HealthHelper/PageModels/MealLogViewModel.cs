@@ -143,12 +143,16 @@ public partial class MealLogViewModel : ObservableObject
                 summaryEntry = existingSummary;
             }
 
+            var effectiveGeneratedAt = summaryPayload.GeneratedAt != default
+                ? summaryPayload.GeneratedAt
+                : summaryEntry.CapturedAt;
+
             await WithSummaryCardLockAsync(async () =>
             {
                 await MainThread.InvokeOnMainThreadAsync(() =>
                 {
-                    SummaryCard ??= new DailySummaryCard(summaryEntry.EntryId, summaryPayload.MealCount, summaryPayload.GeneratedAt, summaryEntry.ProcessingStatus);
-                    SummaryCard.RefreshMetadata(summaryPayload.MealCount, summaryPayload.GeneratedAt);
+                    SummaryCard ??= new DailySummaryCard(summaryEntry.EntryId, summaryPayload.MealCount, effectiveGeneratedAt, summaryEntry.ProcessingStatus);
+                    SummaryCard.RefreshMetadata(summaryPayload.MealCount, effectiveGeneratedAt);
                     SummaryCard.ProcessingStatus = ProcessingStatus.Pending;
                     SummaryCard.IsOutdated = false;
                     GenerateDailySummaryCommand.NotifyCanExecuteChanged();
@@ -233,7 +237,11 @@ public partial class MealLogViewModel : ObservableObject
             if (summaryEntry is not null)
             {
                 var payload = summaryEntry.Payload as DailySummaryPayload ?? new DailySummaryPayload();
-                summaryCard = new DailySummaryCard(summaryEntry.EntryId, payload.MealCount, payload.GeneratedAt, summaryEntry.ProcessingStatus);
+                var generatedAt = payload.GeneratedAt != default
+                    ? payload.GeneratedAt
+                    : summaryEntry.CapturedAt;
+
+                summaryCard = new DailySummaryCard(summaryEntry.EntryId, payload.MealCount, generatedAt, summaryEntry.ProcessingStatus);
             }
 
             var mealEntries = entries
@@ -364,11 +372,6 @@ public partial class MealLogViewModel : ObservableObject
                 }
 
                 SummaryCard.ProcessingStatus = newStatus;
-
-                if (newStatus == ProcessingStatus.Completed)
-                {
-                    SummaryCard.RefreshMetadata(Meals.Count, DateTime.UtcNow);
-                }
 
                 UpdateSummaryOutdatedFlag(Meals.Count);
                 GenerateDailySummaryCommand.NotifyCanExecuteChanged();

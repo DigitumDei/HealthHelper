@@ -42,7 +42,7 @@
                            Style="{StaticResource Body2Strong}" />
 
                     <Label Grid.Row="1"
-                           Text="{Binding SummaryCard.GeneratedAt, StringFormat='Generated {0:MMM d, h:mm tt}'}"
+                           Text="{Binding SummaryCard.LocalGeneratedAt, StringFormat='Generated {0:MMM d, h:mm tt}'}"
                            Style="{StaticResource Caption1}" />
 
                     <Label Grid.Row="2"
