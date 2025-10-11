@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Services.Analysis;
+using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 
@@ -106,14 +107,25 @@ public partial class DailySummaryViewModel : ObservableObject
             {
                 ProcessingStatus = entry.ProcessingStatus;
 
-                var generatedAtUtc = entry.Payload is DailySummaryPayload payload && payload.GeneratedAt != default
-                    ? payload.GeneratedAt
-                    : entry.CapturedAt;
+                var payload = entry.Payload as DailySummaryPayload ?? new DailySummaryPayload();
+                var hasExplicitGeneratedAt = payload.GeneratedAt != default;
+                var generatedAtUtc = hasExplicitGeneratedAt ? payload.GeneratedAt : entry.CapturedAt;
+                var generatedAtTimeZoneId = hasExplicitGeneratedAt
+                    ? payload.GeneratedAtTimeZoneId ?? entry.CapturedAtTimeZoneId
+                    : entry.CapturedAtTimeZoneId;
+                var generatedAtOffsetMinutes = hasExplicitGeneratedAt
+                    ? payload.GeneratedAtOffsetMinutes ?? entry.CapturedAtOffsetMinutes
+                    : entry.CapturedAtOffsetMinutes;
+
+                var generatedAtLocal = DateTimeConverter.ToOriginalLocal(
+                    generatedAtUtc,
+                    generatedAtTimeZoneId,
+                    generatedAtOffsetMinutes);
 
                 GeneratedAtText = string.Format(
                     CultureInfo.CurrentCulture,
                     "Generated {0}",
-                    generatedAtUtc.ToLocalTime().ToString("f", CultureInfo.CurrentCulture));
+                    generatedAtLocal.ToString("f", CultureInfo.CurrentCulture));
             });
 
             var analysis = await _entryAnalysisRepository.GetByTrackedEntryIdAsync(SummaryEntryId).ConfigureAwait(false);
@@ -225,19 +237,29 @@ public partial class DailySummaryViewModel : ObservableObject
                 return;
             }
 
+            var entryTimeZone = DateTimeConverter.ResolveTimeZone(entry.CapturedAtTimeZoneId, entry.CapturedAtOffsetMinutes);
+            var entryLocalDate = DateTimeConverter.ToOriginalLocal(entry.CapturedAt, entry.CapturedAtTimeZoneId, entry.CapturedAtOffsetMinutes, entryTimeZone);
+
             var mealEntries = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync("Meal", entry.CapturedAt)
+                .GetByEntryTypeAndDayAsync("Meal", entryLocalDate, entryTimeZone)
                 .ConfigureAwait(false);
             var mealCount = mealEntries.Count();
+
+            var regenerateCapturedAtUtc = DateTime.UtcNow;
+            var (timeZoneId, offsetMinutes) = DateTimeConverter.CaptureTimeZoneMetadata(regenerateCapturedAtUtc);
 
             var payload = new DailySummaryPayload
             {
                 SchemaVersion = 1,
                 MealCount = mealCount,
-                GeneratedAt = DateTime.UtcNow
+                GeneratedAt = regenerateCapturedAtUtc,
+                GeneratedAtTimeZoneId = timeZoneId,
+                GeneratedAtOffsetMinutes = offsetMinutes
             };
             entry.Payload = payload;
-            entry.CapturedAt = DateTime.UtcNow;
+            entry.CapturedAt = regenerateCapturedAtUtc;
+            entry.CapturedAtTimeZoneId = timeZoneId;
+            entry.CapturedAtOffsetMinutes = offsetMinutes;
             entry.ProcessingStatus = ProcessingStatus.Pending;
             entry.DataSchemaVersion = payload.SchemaVersion;
 

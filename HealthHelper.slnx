@@ -3,4 +3,5 @@
   <Project Path="HealthHelper/HealthHelper.csproj">
     <Deploy Solution="Debug|*" />
   </Project>
+  <Project Path="HealthHelper.Tests/HealthHelper.Tests.csproj" />
 </Solution>

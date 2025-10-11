@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Services.Llm;
+using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace HealthHelper.Services.Analysis;
@@ -67,8 +68,13 @@ public class DailySummaryService : IDailySummaryService
                 return AnalysisInvocationResult.MissingCredentials(settings.SelectedProvider);
             }
 
+            var summaryTimeZone = DateTimeConverter.ResolveTimeZone(summaryEntry.CapturedAtTimeZoneId, summaryEntry.CapturedAtOffsetMinutes);
+            var summaryLocalDate = DateTimeConverter.ToOriginalLocal(summaryEntry.CapturedAt, summaryEntry.CapturedAtTimeZoneId, summaryEntry.CapturedAtOffsetMinutes, summaryTimeZone);
+            var summaryOffsetMinutes = summaryEntry.CapturedAtOffsetMinutes
+                ?? (summaryTimeZone is not null ? DateTimeConverter.GetUtcOffsetMinutes(summaryTimeZone, summaryEntry.CapturedAt) : (int?)null);
+
             var mealsForDay = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync("Meal", summaryEntry.CapturedAt)
+                .GetByEntryTypeAndDayAsync("Meal", summaryLocalDate, summaryTimeZone)
                 .ConfigureAwait(false);
 
             var completedMealEntries = mealsForDay
@@ -77,7 +83,7 @@ public class DailySummaryService : IDailySummaryService
                 .ToList();
 
             var analyses = await _entryAnalysisRepository
-                .ListByDayAsync(summaryEntry.CapturedAt)
+                .ListByDayAsync(summaryLocalDate, summaryTimeZone)
                 .ConfigureAwait(false);
 
             var analysesByEntry = analyses
@@ -88,7 +94,9 @@ public class DailySummaryService : IDailySummaryService
             var summaryRequest = new DailySummaryRequest
             {
                 SummaryEntryId = summaryEntry.EntryId,
-                SummaryDate = summaryEntry.CapturedAt.Date
+                SummaryDate = summaryLocalDate.Date,
+                SummaryTimeZoneId = summaryEntry.CapturedAtTimeZoneId,
+                SummaryUtcOffsetMinutes = summaryOffsetMinutes
             };
 
             foreach (var mealEntry in completedMealEntries)
@@ -110,10 +118,18 @@ public class DailySummaryService : IDailySummaryService
 
                 var description = (mealEntry.Payload as MealPayload)?.Description;
 
+                var mealTimeZone = DateTimeConverter.ResolveTimeZone(mealEntry.CapturedAtTimeZoneId, mealEntry.CapturedAtOffsetMinutes);
+                var mealCapturedAtLocal = DateTimeConverter.ToOriginalLocal(mealEntry.CapturedAt, mealEntry.CapturedAtTimeZoneId, mealEntry.CapturedAtOffsetMinutes, mealTimeZone);
+                var mealOffsetMinutes = mealEntry.CapturedAtOffsetMinutes
+                    ?? (mealTimeZone is not null ? DateTimeConverter.GetUtcOffsetMinutes(mealTimeZone, mealEntry.CapturedAt) : (int?)null);
+
                 summaryRequest.Meals.Add(new DailySummaryMealContext
                 {
                     EntryId = mealEntry.EntryId,
                     CapturedAt = mealEntry.CapturedAt,
+                    CapturedAtLocal = mealCapturedAtLocal,
+                    TimeZoneId = mealEntry.CapturedAtTimeZoneId,
+                    UtcOffsetMinutes = mealOffsetMinutes,
                     Description = description,
                     Analysis = structuredAnalysis
                 });

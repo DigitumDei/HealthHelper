@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using HealthHelper.Utilities;
 
 namespace HealthHelper.Models;
 
@@ -9,17 +10,14 @@ public partial class MealPhoto : ObservableObject
     public string OriginalPath { get; init; }
     public string Description { get; init; }
     public DateTime CapturedAt { get; init; }
+    public string? CapturedAtTimeZoneId { get; init; }
+    public int? CapturedAtOffsetMinutes { get; init; }
 
     public DateTime LocalCapturedAt
     {
         get
         {
-            return CapturedAt.Kind switch
-            {
-                DateTimeKind.Utc => CapturedAt.ToLocalTime(),
-                DateTimeKind.Unspecified => DateTime.SpecifyKind(CapturedAt, DateTimeKind.Utc).ToLocalTime(),
-                _ => CapturedAt
-            };
+            return DateTimeConverter.ToOriginalLocal(CapturedAt, CapturedAtTimeZoneId, CapturedAtOffsetMinutes);
         }
     }
 
@@ -28,13 +26,23 @@ public partial class MealPhoto : ObservableObject
 
     public bool IsClickable => ProcessingStatus == ProcessingStatus.Completed;
 
-    public MealPhoto(int entryId, string fullPath, string originalPath, string description, DateTime capturedAt, ProcessingStatus processingStatus)
+    public MealPhoto(
+        int entryId,
+        string fullPath,
+        string originalPath,
+        string description,
+        DateTime capturedAt,
+        string? capturedAtTimeZoneId,
+        int? capturedAtOffsetMinutes,
+        ProcessingStatus processingStatus)
     {
         EntryId = entryId;
         FullPath = fullPath;
         OriginalPath = originalPath;
         Description = description;
         CapturedAt = capturedAt;
+        CapturedAtTimeZoneId = capturedAtTimeZoneId;
+        CapturedAtOffsetMinutes = capturedAtOffsetMinutes;
         ProcessingStatus = processingStatus;
     }
 

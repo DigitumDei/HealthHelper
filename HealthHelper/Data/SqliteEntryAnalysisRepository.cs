@@ -1,5 +1,6 @@
 
 using HealthHelper.Models;
+using HealthHelper.Utilities;
 using Microsoft.EntityFrameworkCore;
 
 namespace HealthHelper.Data;
@@ -20,10 +21,12 @@ public class SqliteEntryAnalysisRepository : IEntryAnalysisRepository
         _context.Entry(analysis).State = EntityState.Detached;
     }
 
-    public async Task<IEnumerable<EntryAnalysis>> ListByDayAsync(DateTime date)
+    public async Task<IEnumerable<EntryAnalysis>> ListByDayAsync(DateTime date, TimeZoneInfo? timeZone = null)
     {
+        var (utcStart, utcEnd) = DateTimeConverter.GetUtcBoundsForLocalDay(date, timeZone);
+
         return await _context.EntryAnalyses
-            .Where(a => a.CapturedAt.Date == date.Date)
+            .Where(a => a.CapturedAt >= utcStart && a.CapturedAt < utcEnd)
             .ToListAsync();
     }
 

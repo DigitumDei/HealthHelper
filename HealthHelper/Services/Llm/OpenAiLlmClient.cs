@@ -3,6 +3,7 @@ using System.ClientModel;
 using System.Text;
 using System.Text.Json;
 using HealthHelper.Models;
+using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
@@ -307,12 +308,36 @@ Important rules:
 
         var builder = new StringBuilder();
         builder.AppendLine($"SummaryDate: {summaryRequest.SummaryDate:yyyy-MM-dd}");
+
+        if (!string.IsNullOrWhiteSpace(summaryRequest.SummaryTimeZoneId) || summaryRequest.SummaryUtcOffsetMinutes is not null)
+        {
+            var offsetText = summaryRequest.SummaryUtcOffsetMinutes is int offset
+                ? DateTimeConverter.FormatOffset(offset)
+                : "unknown";
+            builder.AppendLine($"SummaryTimeZone: {summaryRequest.SummaryTimeZoneId ?? "unknown"} (UTC{offsetText})");
+        }
+
         builder.AppendLine($"MealsCaptured: {summaryRequest.Meals.Count}");
         builder.AppendLine("Meals:");
 
         foreach (var (meal, index) in summaryRequest.Meals.Select((m, i) => (m, i + 1)))
         {
-            builder.AppendLine($"- Meal {index} (EntryId: {meal.EntryId}, CapturedAtUtc: {meal.CapturedAt:O})");
+            builder.AppendLine($"- Meal {index} (EntryId: {meal.EntryId})");
+            builder.AppendLine($"  CapturedAtUtc: {meal.CapturedAt:O}");
+
+            if (meal.CapturedAtLocal != default)
+            {
+                builder.AppendLine($"  CapturedAtLocal: {meal.CapturedAtLocal:O}");
+            }
+            else
+            {
+                builder.AppendLine("  CapturedAtLocal: unknown");
+            }
+
+            var mealOffsetText = meal.UtcOffsetMinutes is int mealOffset
+                ? DateTimeConverter.FormatOffset(mealOffset)
+                : "unknown";
+            builder.AppendLine($"  TimeZone: {meal.TimeZoneId ?? "unknown"} (UTC{mealOffsetText})");
             if (!string.IsNullOrWhiteSpace(meal.Description))
             {
                 builder.AppendLine($"  Description: {meal.Description}");

@@ -11,6 +11,7 @@ using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Pages;
 using HealthHelper.Services.Analysis;
+using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
@@ -97,19 +98,24 @@ public partial class MealLogViewModel : ObservableObject
             IsGeneratingSummary = true;
 
             var mealsForDay = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync("Meal", DateTime.UtcNow)
+                .GetByEntryTypeAndDayAsync("Meal", DateTime.Now)
                 .ConfigureAwait(false);
 
             var mealCountSnapshot = mealsForDay.Count();
+            var summaryCapturedAtUtc = DateTime.UtcNow;
+            var (summaryTimeZoneId, summaryOffsetMinutes) = DateTimeConverter.CaptureTimeZoneMetadata(summaryCapturedAtUtc);
+
             var summaryPayload = new DailySummaryPayload
             {
                 SchemaVersion = 1,
                 MealCount = mealCountSnapshot,
-                GeneratedAt = DateTime.UtcNow
+                GeneratedAt = summaryCapturedAtUtc,
+                GeneratedAtTimeZoneId = summaryTimeZoneId,
+                GeneratedAtOffsetMinutes = summaryOffsetMinutes
             };
 
             var existingSummaryEntries = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync("DailySummary", DateTime.UtcNow)
+                .GetByEntryTypeAndDayAsync("DailySummary", DateTime.Now)
                 .ConfigureAwait(false);
 
             var existingSummary = existingSummaryEntries
@@ -123,7 +129,9 @@ public partial class MealLogViewModel : ObservableObject
                 summaryEntry = new TrackedEntry
                 {
                     EntryType = "DailySummary",
-                    CapturedAt = DateTime.UtcNow,
+                    CapturedAt = summaryCapturedAtUtc,
+                    CapturedAtTimeZoneId = summaryTimeZoneId,
+                    CapturedAtOffsetMinutes = summaryOffsetMinutes,
                     BlobPath = null,
                     Payload = summaryPayload,
                     DataSchemaVersion = 1,
@@ -135,7 +143,9 @@ public partial class MealLogViewModel : ObservableObject
             else
             {
                 existingSummary.Payload = summaryPayload;
-                existingSummary.CapturedAt = DateTime.UtcNow;
+                existingSummary.CapturedAt = summaryCapturedAtUtc;
+                existingSummary.CapturedAtTimeZoneId = summaryTimeZoneId;
+                existingSummary.CapturedAtOffsetMinutes = summaryOffsetMinutes;
                 existingSummary.ProcessingStatus = ProcessingStatus.Pending;
                 existingSummary.DataSchemaVersion = summaryPayload.SchemaVersion;
 
@@ -143,16 +153,41 @@ public partial class MealLogViewModel : ObservableObject
                 summaryEntry = existingSummary;
             }
 
-            var effectiveGeneratedAt = summaryPayload.GeneratedAt != default
+            var hasExplicitGeneratedAt = summaryPayload.GeneratedAt != default;
+            var effectiveGeneratedAt = hasExplicitGeneratedAt
                 ? summaryPayload.GeneratedAt
                 : summaryEntry.CapturedAt;
+            var effectiveGeneratedAtTimeZoneId = hasExplicitGeneratedAt
+                ? summaryPayload.GeneratedAtTimeZoneId ?? summaryEntry.CapturedAtTimeZoneId
+                : summaryEntry.CapturedAtTimeZoneId;
+            var effectiveGeneratedAtOffsetMinutes = hasExplicitGeneratedAt
+                ? summaryPayload.GeneratedAtOffsetMinutes ?? summaryEntry.CapturedAtOffsetMinutes
+                : summaryEntry.CapturedAtOffsetMinutes;
+
+            var generatedAtTimeZone = DateTimeConverter.ResolveTimeZone(
+                effectiveGeneratedAtTimeZoneId,
+                effectiveGeneratedAtOffsetMinutes ?? summaryEntry.CapturedAtOffsetMinutes);
+            if (effectiveGeneratedAtOffsetMinutes is null && generatedAtTimeZone is not null)
+            {
+                effectiveGeneratedAtOffsetMinutes = DateTimeConverter.GetUtcOffsetMinutes(generatedAtTimeZone, effectiveGeneratedAt);
+            }
 
             await WithSummaryCardLockAsync(async () =>
             {
                 await MainThread.InvokeOnMainThreadAsync(() =>
                 {
-                    SummaryCard ??= new DailySummaryCard(summaryEntry.EntryId, summaryPayload.MealCount, effectiveGeneratedAt, summaryEntry.ProcessingStatus);
-                    SummaryCard.RefreshMetadata(summaryPayload.MealCount, effectiveGeneratedAt);
+                    SummaryCard ??= new DailySummaryCard(
+                        summaryEntry.EntryId,
+                        summaryPayload.MealCount,
+                        effectiveGeneratedAt,
+                        effectiveGeneratedAtTimeZoneId,
+                        effectiveGeneratedAtOffsetMinutes,
+                        summaryEntry.ProcessingStatus);
+                    SummaryCard.RefreshMetadata(
+                        summaryPayload.MealCount,
+                        effectiveGeneratedAt,
+                        effectiveGeneratedAtTimeZoneId,
+                        effectiveGeneratedAtOffsetMinutes);
                     SummaryCard.ProcessingStatus = ProcessingStatus.Pending;
                     SummaryCard.IsOutdated = false;
                     GenerateDailySummaryCommand.NotifyCanExecuteChanged();
@@ -222,11 +257,11 @@ public partial class MealLogViewModel : ObservableObject
     {
         try
         {
-            _logger.LogDebug("Loading meal entries for {Date}.", DateTime.UtcNow.Date);
-            var entries = await _trackedEntryRepository.GetByDayAsync(DateTime.UtcNow).ConfigureAwait(false);
+            _logger.LogDebug("Loading meal entries for {Date}.", DateTime.Now.Date);
+            var entries = await _trackedEntryRepository.GetByDayAsync(DateTime.Now).ConfigureAwait(false);
 
             var summaryEntries = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync("DailySummary", DateTime.UtcNow)
+                .GetByEntryTypeAndDayAsync("DailySummary", DateTime.Now)
                 .ConfigureAwait(false);
 
             var summaryEntry = summaryEntries
@@ -237,11 +272,32 @@ public partial class MealLogViewModel : ObservableObject
             if (summaryEntry is not null)
             {
                 var payload = summaryEntry.Payload as DailySummaryPayload ?? new DailySummaryPayload();
-                var generatedAt = payload.GeneratedAt != default
+                var hasExplicitGeneratedAt = payload.GeneratedAt != default;
+                var generatedAt = hasExplicitGeneratedAt
                     ? payload.GeneratedAt
                     : summaryEntry.CapturedAt;
+                var generatedAtTimeZoneId = hasExplicitGeneratedAt
+                    ? payload.GeneratedAtTimeZoneId ?? summaryEntry.CapturedAtTimeZoneId
+                    : summaryEntry.CapturedAtTimeZoneId;
+                var generatedAtOffsetMinutes = hasExplicitGeneratedAt
+                    ? payload.GeneratedAtOffsetMinutes ?? summaryEntry.CapturedAtOffsetMinutes
+                    : summaryEntry.CapturedAtOffsetMinutes;
 
-                summaryCard = new DailySummaryCard(summaryEntry.EntryId, payload.MealCount, generatedAt, summaryEntry.ProcessingStatus);
+                var generatedAtTimeZone = DateTimeConverter.ResolveTimeZone(
+                    generatedAtTimeZoneId,
+                    generatedAtOffsetMinutes ?? summaryEntry.CapturedAtOffsetMinutes);
+                if (generatedAtOffsetMinutes is null && generatedAtTimeZone is not null)
+                {
+                    generatedAtOffsetMinutes = DateTimeConverter.GetUtcOffsetMinutes(generatedAtTimeZone, generatedAt);
+                }
+
+                summaryCard = new DailySummaryCard(
+                    summaryEntry.EntryId,
+                    payload.MealCount,
+                    generatedAt,
+                    generatedAtTimeZoneId,
+                    generatedAtOffsetMinutes,
+                    summaryEntry.ProcessingStatus);
             }
 
             var mealEntries = entries
@@ -265,7 +321,15 @@ public partial class MealLogViewModel : ObservableObject
 
                     var displayFullPath = Path.Combine(FileSystem.AppDataDirectory, displayPathRelative);
                     var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, originalRelativePath);
-                    return new MealPhoto(entry.EntryId, displayFullPath, originalFullPath, mealPayload.Description ?? string.Empty, entry.CapturedAt, entry.ProcessingStatus);
+                    return new MealPhoto(
+                        entry.EntryId,
+                        displayFullPath,
+                        originalFullPath,
+                        mealPayload.Description ?? string.Empty,
+                        entry.CapturedAt,
+                        entry.CapturedAtTimeZoneId,
+                        entry.CapturedAtOffsetMinutes,
+                        entry.ProcessingStatus);
                 })
                 .OfType<MealPhoto>()
                 .ToList();
@@ -292,7 +356,11 @@ public partial class MealLogViewModel : ObservableObject
                         }
                         else if (SummaryCard is not null)
                         {
-                            SummaryCard.RefreshMetadata(summaryCard.MealCount, summaryCard.GeneratedAt);
+                            SummaryCard.RefreshMetadata(
+                                summaryCard.MealCount,
+                                summaryCard.GeneratedAt,
+                                summaryCard.GeneratedAtTimeZoneId,
+                                summaryCard.GeneratedAtOffsetMinutes);
                             SummaryCard.ProcessingStatus = summaryCard.ProcessingStatus;
                         }
                     }
@@ -337,6 +405,8 @@ public partial class MealLogViewModel : ObservableObject
             originalFullPath,
             mealPayload.Description ?? string.Empty,
             entry.CapturedAt,
+            entry.CapturedAtTimeZoneId,
+            entry.CapturedAtOffsetMinutes,
             entry.ProcessingStatus);
 
         await MainThread.InvokeOnMainThreadAsync(() =>

@@ -1,5 +1,6 @@
 
 using HealthHelper.Models;
+using HealthHelper.Utilities;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
@@ -21,11 +22,13 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         await _context.SaveChangesAsync();
     }
 
-    public async Task<IEnumerable<TrackedEntry>> GetByDayAsync(DateTime date)
+    public async Task<IEnumerable<TrackedEntry>> GetByDayAsync(DateTime date, TimeZoneInfo? timeZone = null)
     {
+        var (utcStart, utcEnd) = DateTimeConverter.GetUtcBoundsForLocalDay(date, timeZone);
+
         var entries = await _context.TrackedEntries
             .AsNoTracking()  // Disable EF tracking to always get fresh data from DB
-            .Where(e => e.CapturedAt.Date == date.Date)
+            .Where(e => e.CapturedAt >= utcStart && e.CapturedAt < utcEnd)
             .ToListAsync();
 
         foreach (var entry in entries)
@@ -35,11 +38,13 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         return entries;
     }
 
-    public async Task<IEnumerable<TrackedEntry>> GetByEntryTypeAndDayAsync(string entryType, DateTime date)
+    public async Task<IEnumerable<TrackedEntry>> GetByEntryTypeAndDayAsync(string entryType, DateTime date, TimeZoneInfo? timeZone = null)
     {
+        var (utcStart, utcEnd) = DateTimeConverter.GetUtcBoundsForLocalDay(date, timeZone);
+
         var entries = await _context.TrackedEntries
             .AsNoTracking()
-            .Where(e => e.EntryType == entryType && e.CapturedAt.Date == date.Date)
+            .Where(e => e.EntryType == entryType && e.CapturedAt >= utcStart && e.CapturedAt < utcEnd)
             .ToListAsync();
 
         foreach (var entry in entries)
@@ -92,6 +97,8 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
 
         trackedEntry.EntryType = entry.EntryType;
         trackedEntry.CapturedAt = entry.CapturedAt;
+        trackedEntry.CapturedAtTimeZoneId = entry.CapturedAtTimeZoneId;
+        trackedEntry.CapturedAtOffsetMinutes = entry.CapturedAtOffsetMinutes;
         trackedEntry.BlobPath = entry.BlobPath;
         trackedEntry.DataSchemaVersion = entry.DataSchemaVersion;
         trackedEntry.DataPayload = JsonSerializer.Serialize(entry.Payload);
