@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace HealthHelper.Migrations
 {
     [DbContext(typeof(HealthHelperDbContext))]
-    [Migration("20251015220000_AddCapturedAtTimeZoneMetadata")]
+    [Migration("20251010220000_AddCapturedAtTimeZoneMetadata")]
     partial class AddCapturedAtTimeZoneMetadata
     {
         /// <inheritdoc />
