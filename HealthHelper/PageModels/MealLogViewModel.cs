@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -9,6 +11,7 @@ using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Pages;
 using HealthHelper.Services.Analysis;
+using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
@@ -20,13 +23,31 @@ public partial class MealLogViewModel : ObservableObject
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly ILogger<MealLogViewModel> _logger;
+    private readonly SemaphoreSlim _summaryCardLock = new(1, 1);
     public ObservableCollection<MealPhoto> Meals { get; } = new();
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(GenerateDailySummaryCommand))]
+    private DailySummaryCard? summaryCard;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(GenerateDailySummaryCommand))]
+    private bool isGeneratingSummary;
+
+    public bool ShowGenerateSummaryButton => SummaryCard is null;
+    public bool ShowSummaryCard => SummaryCard is not null;
 
     public MealLogViewModel(ITrackedEntryRepository trackedEntryRepository, IBackgroundAnalysisService backgroundAnalysisService, ILogger<MealLogViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
         _logger = logger;
+    }
+
+    partial void OnSummaryCardChanged(DailySummaryCard? value)
+    {
+        OnPropertyChanged(nameof(ShowGenerateSummaryButton));
+        OnPropertyChanged(nameof(ShowSummaryCard));
     }
 
     [RelayCommand]
@@ -64,14 +85,226 @@ public partial class MealLogViewModel : ObservableObject
         }
     }
 
+    [RelayCommand(CanExecute = nameof(CanGenerateSummary))]
+    private async Task GenerateDailySummaryAsync()
+    {
+        if (IsGeneratingSummary)
+        {
+            return;
+        }
+
+        try
+        {
+            IsGeneratingSummary = true;
+
+            var mealsForDay = await _trackedEntryRepository
+                .GetByEntryTypeAndDayAsync("Meal", DateTime.Now)
+                .ConfigureAwait(false);
+
+            var mealCountSnapshot = mealsForDay.Count();
+            var summaryCapturedAtUtc = DateTime.UtcNow;
+            var (summaryTimeZoneId, summaryOffsetMinutes) = DateTimeConverter.CaptureTimeZoneMetadata(summaryCapturedAtUtc);
+
+            var summaryPayload = new DailySummaryPayload
+            {
+                SchemaVersion = 1,
+                MealCount = mealCountSnapshot,
+                GeneratedAt = summaryCapturedAtUtc,
+                GeneratedAtTimeZoneId = summaryTimeZoneId,
+                GeneratedAtOffsetMinutes = summaryOffsetMinutes
+            };
+
+            var existingSummaryEntries = await _trackedEntryRepository
+                .GetByEntryTypeAndDayAsync("DailySummary", DateTime.Now)
+                .ConfigureAwait(false);
+
+            var existingSummary = existingSummaryEntries
+                .OrderByDescending(entry => entry.CapturedAt)
+                .FirstOrDefault();
+
+            TrackedEntry summaryEntry;
+
+            if (existingSummary is null)
+            {
+                summaryEntry = new TrackedEntry
+                {
+                    EntryType = "DailySummary",
+                    CapturedAt = summaryCapturedAtUtc,
+                    CapturedAtTimeZoneId = summaryTimeZoneId,
+                    CapturedAtOffsetMinutes = summaryOffsetMinutes,
+                    BlobPath = null,
+                    Payload = summaryPayload,
+                    DataSchemaVersion = 1,
+                    ProcessingStatus = ProcessingStatus.Pending
+                };
+
+                await _trackedEntryRepository.AddAsync(summaryEntry).ConfigureAwait(false);
+            }
+            else
+            {
+                existingSummary.Payload = summaryPayload;
+                existingSummary.CapturedAt = summaryCapturedAtUtc;
+                existingSummary.CapturedAtTimeZoneId = summaryTimeZoneId;
+                existingSummary.CapturedAtOffsetMinutes = summaryOffsetMinutes;
+                existingSummary.ProcessingStatus = ProcessingStatus.Pending;
+                existingSummary.DataSchemaVersion = summaryPayload.SchemaVersion;
+
+                await _trackedEntryRepository.UpdateAsync(existingSummary).ConfigureAwait(false);
+                summaryEntry = existingSummary;
+            }
+
+            var hasExplicitGeneratedAt = summaryPayload.GeneratedAt != default;
+            var effectiveGeneratedAt = hasExplicitGeneratedAt
+                ? summaryPayload.GeneratedAt
+                : summaryEntry.CapturedAt;
+            var effectiveGeneratedAtTimeZoneId = hasExplicitGeneratedAt
+                ? summaryPayload.GeneratedAtTimeZoneId ?? summaryEntry.CapturedAtTimeZoneId
+                : summaryEntry.CapturedAtTimeZoneId;
+            var effectiveGeneratedAtOffsetMinutes = hasExplicitGeneratedAt
+                ? summaryPayload.GeneratedAtOffsetMinutes ?? summaryEntry.CapturedAtOffsetMinutes
+                : summaryEntry.CapturedAtOffsetMinutes;
+
+            var generatedAtTimeZone = DateTimeConverter.ResolveTimeZone(
+                effectiveGeneratedAtTimeZoneId,
+                effectiveGeneratedAtOffsetMinutes ?? summaryEntry.CapturedAtOffsetMinutes);
+            if (effectiveGeneratedAtOffsetMinutes is null && generatedAtTimeZone is not null)
+            {
+                effectiveGeneratedAtOffsetMinutes = DateTimeConverter.GetUtcOffsetMinutes(generatedAtTimeZone, effectiveGeneratedAt);
+            }
+
+            await WithSummaryCardLockAsync(async () =>
+            {
+                await MainThread.InvokeOnMainThreadAsync(() =>
+                {
+                    SummaryCard ??= new DailySummaryCard(
+                        summaryEntry.EntryId,
+                        summaryPayload.MealCount,
+                        effectiveGeneratedAt,
+                        effectiveGeneratedAtTimeZoneId,
+                        effectiveGeneratedAtOffsetMinutes,
+                        summaryEntry.ProcessingStatus);
+                    SummaryCard.RefreshMetadata(
+                        summaryPayload.MealCount,
+                        effectiveGeneratedAt,
+                        effectiveGeneratedAtTimeZoneId,
+                        effectiveGeneratedAtOffsetMinutes);
+                    SummaryCard.ProcessingStatus = ProcessingStatus.Pending;
+                    SummaryCard.IsOutdated = false;
+                    GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+                });
+            });
+
+            await _backgroundAnalysisService.QueueEntryAsync(summaryEntry.EntryId).ConfigureAwait(false);
+            _logger.LogInformation("Queued daily summary generation for entry {EntryId}.", summaryEntry.EntryId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate daily summary.");
+            await MainThread.InvokeOnMainThreadAsync(() => Shell.Current.DisplayAlertAsync(
+                "Summary failed",
+                "We couldn't start the daily summary. Try again later.",
+                "OK"));
+        }
+        finally
+        {
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                IsGeneratingSummary = false;
+                GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+            });
+        }
+    }
+
+    private bool CanGenerateSummary()
+    {
+        if (IsGeneratingSummary)
+        {
+            return false;
+        }
+
+        if (SummaryCard is null)
+        {
+            return true;
+        }
+
+        return SummaryCard.ProcessingStatus is not ProcessingStatus.Pending and not ProcessingStatus.Processing;
+    }
+
+    [RelayCommand]
+    private async Task ViewDailySummaryAsync()
+    {
+        if (SummaryCard is null)
+        {
+            return;
+        }
+
+        if (!SummaryCard.IsClickable)
+        {
+            await Shell.Current.DisplayAlertAsync(
+                "Summary Pending",
+                "Your daily summary is still processing. Please try again shortly.",
+                "OK");
+            return;
+        }
+
+        await Shell.Current.GoToAsync(nameof(DailySummaryPage), new Dictionary<string, object>
+        {
+            { "SummaryEntryId", SummaryCard.EntryId }
+        });
+    }
+
     public async Task LoadEntriesAsync()
     {
         try
         {
-            _logger.LogDebug("Loading meal entries for {Date}.", DateTime.UtcNow.Date);
-            var entries = await _trackedEntryRepository.GetByDayAsync(DateTime.UtcNow).ConfigureAwait(false);
+            _logger.LogDebug("Loading meal entries for {Date}.", DateTime.Now.Date);
+            var entries = await _trackedEntryRepository.GetByDayAsync(DateTime.Now).ConfigureAwait(false);
 
-            var mealPhotos = entries
+            var summaryEntries = await _trackedEntryRepository
+                .GetByEntryTypeAndDayAsync("DailySummary", DateTime.Now)
+                .ConfigureAwait(false);
+
+            var summaryEntry = summaryEntries
+                .OrderByDescending(entry => entry.CapturedAt)
+                .FirstOrDefault();
+
+            DailySummaryCard? summaryCard = null;
+            if (summaryEntry is not null)
+            {
+                var payload = summaryEntry.Payload as DailySummaryPayload ?? new DailySummaryPayload();
+                var hasExplicitGeneratedAt = payload.GeneratedAt != default;
+                var generatedAt = hasExplicitGeneratedAt
+                    ? payload.GeneratedAt
+                    : summaryEntry.CapturedAt;
+                var generatedAtTimeZoneId = hasExplicitGeneratedAt
+                    ? payload.GeneratedAtTimeZoneId ?? summaryEntry.CapturedAtTimeZoneId
+                    : summaryEntry.CapturedAtTimeZoneId;
+                var generatedAtOffsetMinutes = hasExplicitGeneratedAt
+                    ? payload.GeneratedAtOffsetMinutes ?? summaryEntry.CapturedAtOffsetMinutes
+                    : summaryEntry.CapturedAtOffsetMinutes;
+
+                var generatedAtTimeZone = DateTimeConverter.ResolveTimeZone(
+                    generatedAtTimeZoneId,
+                    generatedAtOffsetMinutes ?? summaryEntry.CapturedAtOffsetMinutes);
+                if (generatedAtOffsetMinutes is null && generatedAtTimeZone is not null)
+                {
+                    generatedAtOffsetMinutes = DateTimeConverter.GetUtcOffsetMinutes(generatedAtTimeZone, generatedAt);
+                }
+
+                summaryCard = new DailySummaryCard(
+                    summaryEntry.EntryId,
+                    payload.MealCount,
+                    generatedAt,
+                    generatedAtTimeZoneId,
+                    generatedAtOffsetMinutes,
+                    summaryEntry.ProcessingStatus);
+            }
+
+            var mealEntries = entries
+                .Where(entry => string.Equals(entry.EntryType, "Meal", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var mealPhotos = mealEntries
                 .Where(entry => entry.BlobPath is not null && entry.Payload is MealPayload)
                 .OrderByDescending(entry => entry.CapturedAt)
                 .Select(entry =>
@@ -88,7 +321,15 @@ public partial class MealLogViewModel : ObservableObject
 
                     var displayFullPath = Path.Combine(FileSystem.AppDataDirectory, displayPathRelative);
                     var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, originalRelativePath);
-                    return new MealPhoto(entry.EntryId, displayFullPath, originalFullPath, mealPayload.Description ?? string.Empty, entry.CapturedAt, entry.ProcessingStatus);
+                    return new MealPhoto(
+                        entry.EntryId,
+                        displayFullPath,
+                        originalFullPath,
+                        mealPayload.Description ?? string.Empty,
+                        entry.CapturedAt,
+                        entry.CapturedAtTimeZoneId,
+                        entry.CapturedAtOffsetMinutes,
+                        entry.ProcessingStatus);
                 })
                 .OfType<MealPhoto>()
                 .ToList();
@@ -100,6 +341,37 @@ public partial class MealLogViewModel : ObservableObject
                 {
                     Meals.Add(mealPhoto);
                 }
+            });
+
+            await WithSummaryCardLockAsync(async () =>
+            {
+                await MainThread.InvokeOnMainThreadAsync(() =>
+                {
+                    if (summaryCard is not null)
+                    {
+                        var isNewCard = SummaryCard is null || SummaryCard.EntryId != summaryCard.EntryId;
+                        if (isNewCard)
+                        {
+                            SummaryCard = summaryCard;
+                        }
+                        else if (SummaryCard is not null)
+                        {
+                            SummaryCard.RefreshMetadata(
+                                summaryCard.MealCount,
+                                summaryCard.GeneratedAt,
+                                summaryCard.GeneratedAtTimeZoneId,
+                                summaryCard.GeneratedAtOffsetMinutes);
+                            SummaryCard.ProcessingStatus = summaryCard.ProcessingStatus;
+                        }
+                    }
+                    else
+                    {
+                        SummaryCard = null;
+                    }
+
+                    UpdateSummaryOutdatedFlag(mealEntries.Count);
+                    GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+                });
             });
         }
         catch (Exception ex)
@@ -133,11 +405,18 @@ public partial class MealLogViewModel : ObservableObject
             originalFullPath,
             mealPayload.Description ?? string.Empty,
             entry.CapturedAt,
+            entry.CapturedAtTimeZoneId,
+            entry.CapturedAtOffsetMinutes,
             entry.ProcessingStatus);
 
         await MainThread.InvokeOnMainThreadAsync(() =>
         {
             Meals.Insert(0, mealPhoto);
+        });
+
+        await WithSummaryCardLockAsync(async () =>
+        {
+            await MainThread.InvokeOnMainThreadAsync(() => UpdateSummaryOutdatedFlag(Meals.Count));
         });
     }
 
@@ -151,6 +430,52 @@ public partial class MealLogViewModel : ObservableObject
                 existingEntry.ProcessingStatus = newStatus;
             }
         });
+
+        await WithSummaryCardLockAsync(async () =>
+        {
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                if (SummaryCard is null || SummaryCard.EntryId != entryId)
+                {
+                    UpdateSummaryOutdatedFlag(Meals.Count);
+                    return;
+                }
+
+                SummaryCard.ProcessingStatus = newStatus;
+
+                UpdateSummaryOutdatedFlag(Meals.Count);
+                GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+            });
+        });
+    }
+
+    private void UpdateSummaryOutdatedFlag(int currentMealCount)
+    {
+        if (SummaryCard is null)
+        {
+            return;
+        }
+
+        if (SummaryCard.ProcessingStatus == ProcessingStatus.Completed)
+        {
+            SummaryCard.IsOutdated = currentMealCount > SummaryCard.MealCount;
+            return;
+        }
+
+        SummaryCard.IsOutdated = SummaryCard.ProcessingStatus is ProcessingStatus.Failed or ProcessingStatus.Skipped;
+    }
+
+    private async Task WithSummaryCardLockAsync(Func<Task> action)
+    {
+        await _summaryCardLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            _summaryCardLock.Release();
+        }
     }
 
     [RelayCommand]

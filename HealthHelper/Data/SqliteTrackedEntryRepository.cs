@@ -1,5 +1,6 @@
 
 using HealthHelper.Models;
+using HealthHelper.Utilities;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
@@ -21,17 +22,36 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         await _context.SaveChangesAsync();
     }
 
-    public async Task<IEnumerable<TrackedEntry>> GetByDayAsync(DateTime date)
+    public async Task<IEnumerable<TrackedEntry>> GetByDayAsync(DateTime date, TimeZoneInfo? timeZone = null)
     {
+        var (utcStart, utcEnd) = DateTimeConverter.GetUtcBoundsForLocalDay(date, timeZone);
+
         var entries = await _context.TrackedEntries
             .AsNoTracking()  // Disable EF tracking to always get fresh data from DB
-            .Where(e => e.CapturedAt.Date == date.Date)
+            .Where(e => e.CapturedAt >= utcStart && e.CapturedAt < utcEnd)
             .ToListAsync();
 
         foreach (var entry in entries)
         {
             DeserializePayload(entry);
         }
+        return entries;
+    }
+
+    public async Task<IEnumerable<TrackedEntry>> GetByEntryTypeAndDayAsync(string entryType, DateTime date, TimeZoneInfo? timeZone = null)
+    {
+        var (utcStart, utcEnd) = DateTimeConverter.GetUtcBoundsForLocalDay(date, timeZone);
+
+        var entries = await _context.TrackedEntries
+            .AsNoTracking()
+            .Where(e => e.EntryType == entryType && e.CapturedAt >= utcStart && e.CapturedAt < utcEnd)
+            .ToListAsync();
+
+        foreach (var entry in entries)
+        {
+            DeserializePayload(entry);
+        }
+
         return entries;
     }
 
@@ -67,12 +87,46 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         return entry;
     }
 
+    public async Task UpdateAsync(TrackedEntry entry)
+    {
+        var trackedEntry = await _context.TrackedEntries.FindAsync(entry.EntryId);
+        if (trackedEntry is null)
+        {
+            return;
+        }
+
+        trackedEntry.EntryType = entry.EntryType;
+        trackedEntry.CapturedAt = entry.CapturedAt;
+        trackedEntry.CapturedAtTimeZoneId = entry.CapturedAtTimeZoneId;
+        trackedEntry.CapturedAtOffsetMinutes = entry.CapturedAtOffsetMinutes;
+        trackedEntry.BlobPath = entry.BlobPath;
+        trackedEntry.DataSchemaVersion = entry.DataSchemaVersion;
+        trackedEntry.DataPayload = JsonSerializer.Serialize(entry.Payload);
+        trackedEntry.ProcessingStatus = entry.ProcessingStatus;
+        trackedEntry.ExternalId = entry.ExternalId;
+
+        await _context.SaveChangesAsync();
+        _context.Entry(trackedEntry).State = EntityState.Detached;
+    }
+
     private void DeserializePayload(TrackedEntry entry)
     {
-        // A more robust implementation would use the EntryType to deserialize to the correct type
-        if (entry.EntryType == "Meal")
+        entry.Payload = entry.EntryType switch
         {
-            entry.Payload = JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload();
+            "Meal" => JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload(),
+            "DailySummary" => NormalizeDailySummaryPayload(JsonSerializer.Deserialize<DailySummaryPayload>(entry.DataPayload)),
+            _ => entry.Payload
+        };
+    }
+
+    private static DailySummaryPayload NormalizeDailySummaryPayload(DailySummaryPayload? payload)
+    {
+        payload ??= new DailySummaryPayload();
+        if (payload.SchemaVersion == 0)
+        {
+            payload.SchemaVersion = 1;
         }
+
+        return payload;
     }
 }

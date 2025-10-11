@@ -69,7 +69,11 @@ public static class MauiProgram
         builder.Services.AddTransient<MealDetailViewModel>();
         builder.Services.AddTransient<MealDetailPage>();
 
+        builder.Services.AddTransient<DailySummaryViewModel>();
+        builder.Services.AddTransient<DailySummaryPage>();
+
         builder.Services.AddTransient<IAnalysisOrchestrator, AnalysisOrchestrator>();
+        builder.Services.AddTransient<IDailySummaryService, DailySummaryService>();
         builder.Services.AddTransient<ILLmClient, OpenAiLlmClient>();
         builder.Services.AddSingleton<MealAnalysisValidator>();
 

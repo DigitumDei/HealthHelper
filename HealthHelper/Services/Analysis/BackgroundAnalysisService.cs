@@ -68,7 +68,7 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
                     return;
                 }
 
-                var result = await orchestrator.ProcessEntryAsync(entry, cancellationToken);
+                var result = await orchestrator.ProcessEntryAsync(entry, cancellationToken).ConfigureAwait(false);
 
                 // Check cancellation after LLM call
                 if (cancellationToken.IsCancellationRequested)

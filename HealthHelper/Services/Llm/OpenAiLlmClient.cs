@@ -3,6 +3,7 @@ using System.ClientModel;
 using System.Text;
 using System.Text.Json;
 using HealthHelper.Models;
+using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
@@ -86,6 +87,76 @@ public class OpenAiLlmClient : ILLmClient
         catch (Exception ex)
         {
             _logger.LogError(ex, "OpenAI API request failed.");
+            throw;
+        }
+    }
+
+    public async Task<LlmAnalysisResult> InvokeDailySummaryAsync(
+        DailySummaryRequest summaryRequest,
+        LlmRequestContext context,
+        string? existingSummaryJson = null)
+    {
+        if (string.IsNullOrWhiteSpace(context.ApiKey))
+        {
+            throw new InvalidOperationException("OpenAI API key is not configured.");
+        }
+
+        var client = new OpenAIClient(context.ApiKey);
+        var chatClient = client.GetChatClient(context.ModelId);
+
+        var messages = CreateDailySummaryChatRequest(summaryRequest, existingSummaryJson);
+
+        try
+        {
+            var options = new ChatCompletionOptions
+            {
+                ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+            };
+
+            var response = await CompleteChatWithFallbackAsync(chatClient, messages, options).ConfigureAwait(false);
+
+            var insights = ExtractTextContent(response.Value.Content);
+
+            DailySummaryResult? parsedResult = null;
+            try
+            {
+                parsedResult = JsonSerializer.Deserialize<DailySummaryResult>(insights);
+                _logger.LogInformation(
+                    "Parsed structured daily summary for {SummaryDate} covering {MealCount} meals.",
+                    summaryRequest.SummaryDate.ToString("yyyy-MM-dd"),
+                    summaryRequest.Meals.Count);
+            }
+            catch (JsonException jsonEx)
+            {
+                _logger.LogWarning(jsonEx, "Failed to parse structured daily summary response. Storing raw JSON. Response: {Response}", insights);
+            }
+
+            var analysis = new EntryAnalysis
+            {
+                EntryId = summaryRequest.SummaryEntryId,
+                ProviderId = context.Provider.ToString(),
+                Model = context.ModelId,
+                CapturedAt = DateTime.UtcNow,
+                InsightsJson = insights,
+                SchemaVersion = parsedResult?.SchemaVersion ?? "unknown"
+            };
+
+            var diagnostics = new LlmDiagnostics
+            {
+                PromptTokenCount = response.Value.Usage.InputTokenCount,
+                CompletionTokenCount = response.Value.Usage.OutputTokenCount,
+                TotalTokenCount = response.Value.Usage.TotalTokenCount,
+            };
+
+            return new LlmAnalysisResult
+            {
+                Analysis = analysis,
+                Diagnostics = diagnostics
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "OpenAI daily summary request failed.");
             throw;
         }
     }
@@ -208,6 +279,159 @@ Important rules:
         }
 
         return builder.ToString();
+    }
+
+    private static List<ChatMessage> CreateDailySummaryChatRequest(
+        DailySummaryRequest summaryRequest,
+        string? existingSummaryJson)
+    {
+        var systemPrompt = $@"You are a helpful nutrition coach generating a daily summary from prior meal analyses.
+Use the provided structured meal data to calculate totals, evaluate nutritional balance, and offer insights.
+Do not request or expect meal images – only use the supplied analysis data.
+
+You MUST return a JSON object matching this exact schema:
+{GetDailySummarySchema()}
+
+Important rules:
+- Always include every required property from the schema
+- Provide empty arrays when there are no insights or recommendations
+- Use null for unknown numeric values
+- Ensure schemaVersion is ""1.0""
+- Reference meals by their entryId values when describing insights
+- If no meals are available, still return a valid JSON object with empty collections and explanations
+";
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt)
+        };
+
+        var builder = new StringBuilder();
+        builder.AppendLine($"SummaryDate: {summaryRequest.SummaryDate:yyyy-MM-dd}");
+
+        if (!string.IsNullOrWhiteSpace(summaryRequest.SummaryTimeZoneId) || summaryRequest.SummaryUtcOffsetMinutes is not null)
+        {
+            var offsetText = summaryRequest.SummaryUtcOffsetMinutes is int offset
+                ? DateTimeConverter.FormatOffset(offset)
+                : "unknown";
+            builder.AppendLine($"SummaryTimeZone: {summaryRequest.SummaryTimeZoneId ?? "unknown"} (UTC{offsetText})");
+        }
+
+        builder.AppendLine($"MealsCaptured: {summaryRequest.Meals.Count}");
+        builder.AppendLine("Meals:");
+
+        foreach (var (meal, index) in summaryRequest.Meals.Select((m, i) => (m, i + 1)))
+        {
+            builder.AppendLine($"- Meal {index} (EntryId: {meal.EntryId})");
+            builder.AppendLine($"  CapturedAtUtc: {meal.CapturedAt:O}");
+
+            if (meal.CapturedAtLocal != default)
+            {
+                builder.AppendLine($"  CapturedAtLocal: {meal.CapturedAtLocal:O}");
+            }
+            else
+            {
+                builder.AppendLine("  CapturedAtLocal: unknown");
+            }
+
+            var mealOffsetText = meal.UtcOffsetMinutes is int mealOffset
+                ? DateTimeConverter.FormatOffset(mealOffset)
+                : "unknown";
+            builder.AppendLine($"  TimeZone: {meal.TimeZoneId ?? "unknown"} (UTC{mealOffsetText})");
+            if (!string.IsNullOrWhiteSpace(meal.Description))
+            {
+                builder.AppendLine($"  Description: {meal.Description}");
+            }
+
+            if (meal.Analysis is not null)
+            {
+                var json = JsonSerializer.Serialize(meal.Analysis);
+                builder.AppendLine("  MealAnalysisJson: ");
+                builder.AppendLine(json);
+            }
+            else
+            {
+                builder.AppendLine("  MealAnalysisJson: null");
+            }
+
+            builder.AppendLine();
+        }
+
+        messages.Add(new UserChatMessage(builder.ToString()));
+
+        if (!string.IsNullOrWhiteSpace(existingSummaryJson))
+        {
+            messages.Add(new AssistantChatMessage(existingSummaryJson));
+            messages.Add(new UserChatMessage("Regenerate the complete daily summary JSON considering any new data."));
+        }
+
+        return messages;
+    }
+
+    private static string GetDailySummarySchema()
+    {
+        return """
+        {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "string",
+              "description": "Schema version, always '1.0'"
+            },
+            "totals": {
+              "type": "object",
+              "properties": {
+                "calories": { "type": ["number", "null"], "description": "Total calories for the day" },
+                "protein": { "type": ["number", "null"], "description": "Total protein (g)" },
+                "carbohydrates": { "type": ["number", "null"], "description": "Total carbohydrates (g)" },
+                "fat": { "type": ["number", "null"], "description": "Total fat (g)" },
+                "fiber": { "type": ["number", "null"], "description": "Total fiber (g)" },
+                "sugar": { "type": ["number", "null"], "description": "Total sugar (g)" },
+                "sodium": { "type": ["number", "null"], "description": "Total sodium (mg)" }
+              },
+              "required": ["calories", "protein", "carbohydrates", "fat", "fiber", "sugar", "sodium"],
+              "additionalProperties": false
+            },
+            "balance": {
+              "type": "object",
+              "properties": {
+                "overall": { "type": ["string", "null"], "description": "Overall nutritional balance assessment" },
+                "macroBalance": { "type": ["string", "null"], "description": "Macro nutrient balance observations" },
+                "timing": { "type": ["string", "null"], "description": "Meal timing observations" },
+                "variety": { "type": ["string", "null"], "description": "Variety and diversity assessment" }
+              },
+              "required": ["overall", "macroBalance", "timing", "variety"],
+              "additionalProperties": false
+            },
+            "insights": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Key insights about the day's nutrition"
+            },
+            "recommendations": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Actionable recommendations for future meals"
+            },
+            "mealsIncluded": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "entryId": { "type": "integer", "description": "TrackedEntry identifier" },
+                  "capturedAt": { "type": "string", "format": "date-time", "description": "Capture timestamp in ISO 8601" },
+                  "summary": { "type": ["string", "null"], "description": "Short note about the meal" }
+                },
+                "required": ["entryId", "capturedAt", "summary"],
+                "additionalProperties": false
+              },
+              "description": "Meals represented in the summary"
+            }
+          },
+          "required": ["schemaVersion", "totals", "balance", "insights", "recommendations", "mealsIncluded"],
+          "additionalProperties": false
+        }
+        """;
     }
 
     private static string GetMealAnalysisSchema()

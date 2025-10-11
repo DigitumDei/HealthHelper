@@ -2,9 +2,9 @@ using HealthHelper.PageModels;
 
 namespace HealthHelper.Pages;
 
-public partial class MealDetailPage : ContentPage
+public partial class DailySummaryPage : ContentPage
 {
-    public MealDetailPage(MealDetailViewModel viewModel)
+    public DailySummaryPage(DailySummaryViewModel viewModel)
     {
         InitializeComponent();
         BindingContext = viewModel;

@@ -10,6 +10,11 @@ public interface ILLmClient
         LlmRequestContext context,
         string? existingAnalysisJson = null,
         string? correction = null);
+
+    Task<LlmAnalysisResult> InvokeDailySummaryAsync(
+        DailySummaryRequest summaryRequest,
+        LlmRequestContext context,
+        string? existingSummaryJson = null);
 }
 
 public class LlmRequestContext

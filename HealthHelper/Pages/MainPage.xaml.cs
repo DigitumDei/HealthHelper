@@ -7,6 +7,7 @@ using HealthHelper.Models;
 using HealthHelper.PageModels;
 using HealthHelper.Services.Analysis;
 using HealthHelper.Services.Media;
+using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Media;
@@ -217,11 +218,16 @@ public partial class MainPage : ContentPage
         string originalFileName = $"{Guid.NewGuid()}.jpg";
         string previewFileName = $"{Path.GetFileNameWithoutExtension(originalFileName)}_preview.jpg";
 
+        var capturedAtUtc = DateTime.UtcNow;
+        var (timeZoneId, offsetMinutes) = DateTimeConverter.CaptureTimeZoneMetadata(capturedAtUtc);
+
         return new PendingPhotoCapture
         {
             OriginalRelativePath = Path.Combine(relativeDirectory, originalFileName),
             PreviewRelativePath = Path.Combine(relativeDirectory, previewFileName),
-            CapturedAtUtc = DateTime.UtcNow
+            CapturedAtUtc = capturedAtUtc,
+            CapturedAtTimeZoneId = timeZoneId,
+            CapturedAtOffsetMinutes = offsetMinutes
         };
     }
 
@@ -248,10 +254,22 @@ public partial class MainPage : ContentPage
         await _photoResizer.ResizeAsync(previewPath, 1280, 1280);
         _logger.LogInformation("FinalizePhotoCaptureAsync: Preview resized");
 
+        var timeZoneId = capture.CapturedAtTimeZoneId;
+        var offsetMinutes = capture.CapturedAtOffsetMinutes;
+
+        if (timeZoneId is null || offsetMinutes is null)
+        {
+            var metadata = DateTimeConverter.CaptureTimeZoneMetadata(capture.CapturedAtUtc);
+            timeZoneId ??= metadata.TimeZoneId;
+            offsetMinutes ??= metadata.OffsetMinutes;
+        }
+
         var newEntry = new TrackedEntry
         {
             EntryType = "Meal",
             CapturedAt = capture.CapturedAtUtc,
+            CapturedAtTimeZoneId = timeZoneId,
+            CapturedAtOffsetMinutes = offsetMinutes,
             BlobPath = capture.OriginalRelativePath,
             Payload = new MealPayload
             {

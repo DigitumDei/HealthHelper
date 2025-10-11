@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:pageModels="clr-namespace:HealthHelper.PageModels"
+             xmlns:models="clr-namespace:HealthHelper.Models"
+             x:Class="HealthHelper.Pages.DailySummaryPage"
+             x:DataType="pageModels:DailySummaryViewModel"
+             Title="Daily Summary">
+    <ScrollView>
+        <VerticalStackLayout Spacing="16" Padding="24">
+            <Label Text="Daily Summary"
+                   Style="{StaticResource Headline}" />
+
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}" />
+
+            <Label Text="{Binding GeneratedAtText}"
+                   Style="{StaticResource Caption1}" />
+
+            <Label Text="{Binding ProcessingStatus, StringFormat='Status: {0}'}"
+                   Style="{StaticResource Caption1}" />
+
+            <Label Text="{Binding StatusMessage}"
+                   Style="{StaticResource Body1}"
+                   TextColor="{StaticResource Error}">
+                <Label.Triggers>
+                    <DataTrigger TargetType="Label"
+                                Binding="{Binding StatusMessage}"
+                                Value="">
+                        <Setter Property="IsVisible" Value="False" />
+                    </DataTrigger>
+                </Label.Triggers>
+            </Label>
+
+            <Border StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                    Padding="16"
+                    StrokeShape="RoundRectangle 12,12,12,12">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Nutrition Totals"
+                           Style="{StaticResource Body2Strong}" />
+                    <Label Text="{Binding TotalsSummary}"
+                           Style="{StaticResource Body1}"
+                           LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                    Padding="16"
+                    StrokeShape="RoundRectangle 12,12,12,12">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Balance"
+                           Style="{StaticResource Body2Strong}" />
+                    <Label Text="{Binding BalanceOverall}"
+                           Style="{StaticResource Body1}" />
+                    <Label Text="{Binding BalanceMacro}"
+                           Style="{StaticResource Body1}" />
+                    <Label Text="{Binding BalanceTiming}"
+                           Style="{StaticResource Body1}" />
+                    <Label Text="{Binding BalanceVariety}"
+                           Style="{StaticResource Body1}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="Insights"
+                   Style="{StaticResource Body2Strong}" />
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Insights}"
+                                 Spacing="8">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <Label Text="{Binding .}"
+                               Style="{StaticResource Body1}"
+                               LineBreakMode="WordWrap" />
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+                <BindableLayout.EmptyView>
+                    <Label Text="No insights yet."
+                           Style="{StaticResource Caption1}" />
+                </BindableLayout.EmptyView>
+            </VerticalStackLayout>
+
+            <Label Text="Recommendations"
+                   Style="{StaticResource Body2Strong}" />
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Recommendations}"
+                                 Spacing="8">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <Label Text="{Binding .}"
+                               Style="{StaticResource Body1}"
+                               LineBreakMode="WordWrap" />
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+                <BindableLayout.EmptyView>
+                    <Label Text="No recommendations yet."
+                           Style="{StaticResource Caption1}" />
+                </BindableLayout.EmptyView>
+            </VerticalStackLayout>
+
+            <Label Text="Meals Included"
+                   Style="{StaticResource Body2Strong}" />
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding MealsIncluded}"
+                                 Spacing="8">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="models:MealReference">
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="{Binding CapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}"
+                                   Style="{StaticResource Caption1}" />
+                            <Label Text="{Binding Summary}"
+                                   Style="{StaticResource Body1}" />
+                        </VerticalStackLayout>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+                <BindableLayout.EmptyView>
+                    <Label Text="No meals were summarized."
+                           Style="{StaticResource Caption1}" />
+                </BindableLayout.EmptyView>
+            </VerticalStackLayout>
+
+            <Button Text="Regenerate Summary"
+                    Command="{Binding RegenerateCommand}"
+                    IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

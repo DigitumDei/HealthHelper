@@ -35,7 +35,7 @@ public class StaleEntryRecoveryService : IStaleEntryRecoveryService
             _logger.LogInformation("Checking for stale processing entries on app startup...");
 
             // Get today's entries to check for stale Processing states
-            var entries = await _trackedEntryRepository.GetByDayAsync(DateTime.UtcNow);
+            var entries = await _trackedEntryRepository.GetByDayAsync(DateTime.Now);
 
             var staleEntries = entries
                 .Where(e => e.ProcessingStatus == ProcessingStatus.Processing)
