@@ -27,7 +27,7 @@ public partial class MainPage : ContentPage
     private bool _isProcessingPending;
 
     public MainPage(
-        MealLogViewModel viewModel,
+        EntryLogViewModel viewModel,
         ITrackedEntryRepository trackedEntryRepository,
         IBackgroundAnalysisService backgroundAnalysisService,
         ILogger<MainPage> logger,
@@ -49,7 +49,7 @@ public partial class MainPage : ContentPage
     {
         base.OnAppearing();
         _backgroundAnalysisService.StatusChanged += OnEntryStatusChanged;
-        if (BindingContext is MealLogViewModel vm)
+        if (BindingContext is EntryLogViewModel vm)
         {
             await vm.LoadEntriesAsync();
         }
@@ -211,9 +211,9 @@ public partial class MainPage : ContentPage
 
     private PendingPhotoCapture CreatePendingCaptureMetadata()
     {
-        string relativeDirectory = Path.Combine("Entries", "Meal");
-        string mealPhotosDir = Path.Combine(FileSystem.AppDataDirectory, relativeDirectory);
-        Directory.CreateDirectory(mealPhotosDir);
+        string relativeDirectory = Path.Combine("Entries", "Unknown");
+        string pendingDir = Path.Combine(FileSystem.AppDataDirectory, relativeDirectory);
+        Directory.CreateDirectory(pendingDir);
 
         string originalFileName = $"{Guid.NewGuid()}.jpg";
         string previewFileName = $"{Path.GetFileNameWithoutExtension(originalFileName)}_preview.jpg";
@@ -266,17 +266,17 @@ public partial class MainPage : ContentPage
 
         var newEntry = new TrackedEntry
         {
-            EntryType = "Meal",
+            EntryType = EntryType.Unknown,
             CapturedAt = capture.CapturedAtUtc,
             CapturedAtTimeZoneId = timeZoneId,
             CapturedAtOffsetMinutes = offsetMinutes,
             BlobPath = capture.OriginalRelativePath,
-            Payload = new MealPayload
+            Payload = new PendingEntryPayload
             {
-                Description = "New meal photo",
+                Description = "Processing photo",
                 PreviewBlobPath = capture.PreviewRelativePath
             },
-            DataSchemaVersion = 1,
+            DataSchemaVersion = 0,
             ProcessingStatus = ProcessingStatus.Pending
         };
 
@@ -288,7 +288,7 @@ public partial class MainPage : ContentPage
             entryPersisted = true;
             _logger.LogInformation("FinalizePhotoCaptureAsync: Database entry created with ID {EntryId}", newEntry.EntryId);
 
-            if (BindingContext is MealLogViewModel vm)
+            if (BindingContext is EntryLogViewModel vm)
             {
                 try
                 {
@@ -347,26 +347,19 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private async void MealsCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void EntriesCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (BindingContext is not MealLogViewModel vm)
+        if (BindingContext is not EntryLogViewModel vm)
         {
             return;
         }
 
-        if (e.CurrentSelection.FirstOrDefault() is not MealPhoto selectedMeal)
+        if (e.CurrentSelection.FirstOrDefault() is not TrackedEntryCard selectedEntry)
         {
             return;
         }
 
-        if (selectedMeal.ProcessingStatus == ProcessingStatus.Failed || selectedMeal.ProcessingStatus == ProcessingStatus.Skipped)
-        {
-            await vm.RetryAnalysisCommand.ExecuteAsync(selectedMeal);
-        }
-        else if (selectedMeal.IsClickable)
-        {
-            await vm.GoToMealDetailCommand.ExecuteAsync(selectedMeal);
-        }
+        await HandleEntrySelectionAsync(vm, selectedEntry);
 
         if (sender is CollectionView collectionView)
         {
@@ -374,9 +367,21 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private static async Task HandleEntrySelectionAsync(EntryLogViewModel viewModel, TrackedEntryCard entry)
+    {
+        if (entry.ProcessingStatus == ProcessingStatus.Failed || entry.ProcessingStatus == ProcessingStatus.Skipped)
+        {
+            await viewModel.RetryAnalysisCommand.ExecuteAsync(entry);
+        }
+        else if (entry.IsClickable)
+        {
+            await viewModel.GoToEntryDetailCommand.ExecuteAsync(entry);
+        }
+    }
+
     private async void OnEntryStatusChanged(object? sender, EntryStatusChangedEventArgs e)
     {
-        if (BindingContext is MealLogViewModel vm)
+        if (BindingContext is EntryLogViewModel vm)
         {
             await vm.UpdateEntryStatusAsync(e.EntryId, e.Status);
         }

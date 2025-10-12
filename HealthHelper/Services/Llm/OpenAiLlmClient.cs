@@ -1,10 +1,14 @@
 using System;
 using System.ClientModel;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using HealthHelper.Models;
 using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Storage;
 using OpenAI;
 using OpenAI.Chat;
 
@@ -33,38 +37,37 @@ public class OpenAiLlmClient : ILLmClient
         var client = new OpenAIClient(context.ApiKey);
         var chatClient = client.GetChatClient(context.ModelId);
 
-        var messages = await CreateChatRequest(entry, existingAnalysisJson, correction);
+        var messages = await CreateUnifiedChatRequest(entry, existingAnalysisJson, correction).ConfigureAwait(false);
 
         try
         {
-            // Note: CreateJsonSchemaFormat causes serialization errors on Android
-            // Using CreateJsonObjectFormat as first pass - schema is still enforced via prompt
             var options = new ChatCompletionOptions
             {
                 ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
             };
 
-            var response = await CompleteChatWithFallbackAsync(chatClient, messages, options);
+            var response = await CompleteChatWithFallbackAsync(chatClient, messages, options).ConfigureAwait(false);
 
             var insights = ExtractTextContent(response.Value.Content);
 
-            // Validate and parse the structured response
-            MealAnalysisResult? parsedResult = null;
+            UnifiedAnalysisResult? parsedResult = null;
             try
             {
-                parsedResult = JsonSerializer.Deserialize<MealAnalysisResult>(insights);
-                _logger.LogInformation("Successfully parsed structured meal analysis with {FoodItemCount} food items.",
-                    parsedResult?.FoodItems?.Count ?? 0);
+                parsedResult = JsonSerializer.Deserialize<UnifiedAnalysisResult>(insights);
+                _logger.LogInformation(
+                    "Parsed unified analysis for entry {EntryId} detected as {EntryType}.",
+                    entry.EntryId,
+                    parsedResult?.EntryType ?? "Unknown");
             }
             catch (JsonException jsonEx)
             {
-                _logger.LogWarning(jsonEx, "Failed to parse structured response, storing raw JSON. Response: {Response}", insights);
+                _logger.LogWarning(jsonEx, "Failed to parse unified analysis response. Storing raw JSON. Response: {Response}", insights);
             }
 
             var analysis = new EntryAnalysis
             {
                 EntryId = entry.EntryId,
-                ProviderId = LlmProvider.OpenAI.ToString(),
+                ProviderId = context.Provider.ToString(),
                 Model = context.ModelId,
                 CapturedAt = DateTime.UtcNow,
                 InsightsJson = insights,
@@ -86,7 +89,7 @@ public class OpenAiLlmClient : ILLmClient
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "OpenAI API request failed.");
+            _logger.LogError(ex, "OpenAI unified analysis request failed.");
             throw;
         }
     }
@@ -122,9 +125,9 @@ public class OpenAiLlmClient : ILLmClient
             {
                 parsedResult = JsonSerializer.Deserialize<DailySummaryResult>(insights);
                 _logger.LogInformation(
-                    "Parsed structured daily summary for {SummaryDate} covering {MealCount} meals.",
+                    "Parsed structured daily summary for {SummaryDate} covering {EntryCount} entries.",
                     summaryRequest.SummaryDate.ToString("yyyy-MM-dd"),
-                    summaryRequest.Meals.Count);
+                    summaryRequest.Entries.Count);
             }
             catch (JsonException jsonEx)
             {
@@ -161,7 +164,10 @@ public class OpenAiLlmClient : ILLmClient
         }
     }
 
-    private async Task<ClientResult<ChatCompletion>> CompleteChatWithFallbackAsync(ChatClient chatClient, IReadOnlyList<ChatMessage> messages, ChatCompletionOptions options)
+    private async Task<ClientResult<ChatCompletion>> CompleteChatWithFallbackAsync(
+        ChatClient chatClient,
+        IReadOnlyList<ChatMessage> messages,
+        ChatCompletionOptions options)
     {
         try
         {
@@ -179,78 +185,74 @@ public class OpenAiLlmClient : ILLmClient
         return ex.Message?.Contains("WriteCore method", StringComparison.OrdinalIgnoreCase) == true;
     }
 
-    private static async Task<List<ChatMessage>> CreateChatRequest(
+    private static async Task<List<ChatMessage>> CreateUnifiedChatRequest(
         TrackedEntry entry,
         string? existingAnalysisJson,
         string? correction)
     {
-        var systemPrompt = $@"You are a helpful assistant that analyzes meal photos.
-Identify all food items, estimate portion sizes, and provide nutritional information.
-Give an overall health assessment with specific recommendations.
-Be accurate but acknowledge uncertainty when applicable.
+        var systemPrompt = $@"You are a helpful assistant that analyzes images to track health and wellness.
 
-If the user provides corrections or additional details after your previous response,
-incorporate the new information and regenerate the entire JSON output.
+First, determine the entry type based on the image contents:
+- ""Meal"": Food, beverages, nutrition labels, meal prep scenes.
+- ""Exercise"": Workout screenshots or photos showing fitness data (runs, rides, gym tracking, heart rate charts).
+- ""Sleep"": Sleep tracking screenshots, bedroom environments, beds indicating rest.
+- ""Other"": Anything else that doesn't fit the categories above.
 
-You MUST return your analysis as a JSON object matching this exact schema:
-{GetMealAnalysisSchema()}
+Then provide a detailed analysis for the detected type:
+- Meals: identify foods, estimate portions and nutrition, note health insights and recommendations.
+- Exercise: extract displayed metrics (distance, duration, pace, calories, heart rate, etc.) and offer performance feedback.
+- Sleep: summarise sleep duration/quality metrics, environment observations, improvement tips.
+- Other: briefly describe the content and provide any helpful observations.
+
+Return JSON that exactly matches this schema:
+{GetUnifiedAnalysisSchema()}
 
 Important rules:
-- If no food is detected, return an empty foodItems array and add a warning explaining why
-- All required fields must be present, use null for unknown values
-- Arrays can be empty but must be present
-- Confidence values must be between 0.0 and 1.0
-- schemaVersion must always be ""1.0""";
+- Only populate the analysis object that matches the detected entryType; set the others to null.
+- Always include a confidence score between 0.0 and 1.0 reflecting how certain you are about the classification.
+- Include warnings when information is missing, unclear, or potentially incorrect.
+- If the user provides a correction, incorporate it and regenerate the full JSON.";
 
         var messages = new List<ChatMessage>
         {
-            new SystemChatMessage(systemPrompt),
+            new SystemChatMessage(systemPrompt)
         };
 
-        var userInstruction = string.IsNullOrWhiteSpace(correction)
-            ? "Analyze this meal."
-            : "Re-analyze this meal using the user's corrections.";
-
-        var userMessageContent = new List<ChatMessageContentPart>
+        var userContent = new List<ChatMessageContentPart>
         {
-            ChatMessageContentPart.CreateTextPart(userInstruction)
+            ChatMessageContentPart.CreateTextPart("Analyze this image and return the unified JSON response.")
         };
 
-        var absoluteBlobPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath ?? string.Empty);
-        if (!string.IsNullOrEmpty(entry.BlobPath))
+        if (!string.IsNullOrWhiteSpace(entry.BlobPath))
         {
-            var mimeType = Path.GetExtension(entry.BlobPath).ToLowerInvariant() switch
+            var absolutePath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
+            if (File.Exists(absolutePath))
             {
-                ".jpg" => "image/jpeg",
-                ".jpeg" => "image/jpeg",
-                ".png" => "image/png",
-                ".gif" => "image/gif",
-                _ => "image/jpeg"
-            };
+                var mimeType = Path.GetExtension(entry.BlobPath).ToLowerInvariant() switch
+                {
+                    ".jpg" => "image/jpeg",
+                    ".jpeg" => "image/jpeg",
+                    ".png" => "image/png",
+                    ".gif" => "image/gif",
+                    _ => "image/jpeg"
+                };
 
-            if (File.Exists(absoluteBlobPath))
-            {
-                var imageBytes = await File.ReadAllBytesAsync(absoluteBlobPath).ConfigureAwait(false);
-                userMessageContent.Add(ChatMessageContentPart.CreateImagePart(new BinaryData(imageBytes), mimeType));
+                var imageBytes = await File.ReadAllBytesAsync(absolutePath).ConfigureAwait(false);
+                userContent.Add(ChatMessageContentPart.CreateImagePart(new BinaryData(imageBytes), mimeType));
             }
         }
 
-        messages.Add(new UserChatMessage(userMessageContent));
+        messages.Add(new UserChatMessage(userContent));
 
         if (!string.IsNullOrWhiteSpace(existingAnalysisJson))
         {
             messages.Add(new AssistantChatMessage(existingAnalysisJson));
+            messages.Add(new UserChatMessage("The previous message is the earlier JSON response. Update it to reflect the latest instructions."));
         }
 
         if (!string.IsNullOrWhiteSpace(correction))
         {
-            var correctionText = correction.Trim();
-            var correctionParts = new List<ChatMessageContentPart>
-            {
-                ChatMessageContentPart.CreateTextPart($"Correction from the user:\n{correctionText}")
-            };
-
-            messages.Add(new UserChatMessage(correctionParts));
+            messages.Add(new UserChatMessage($"User correction:\n{correction.Trim()}"));
         }
 
         return messages;
@@ -285,9 +287,10 @@ Important rules:
         DailySummaryRequest summaryRequest,
         string? existingSummaryJson)
     {
-        var systemPrompt = $@"You are a helpful nutrition coach generating a daily summary from prior meal analyses.
-Use the provided structured meal data to calculate totals, evaluate nutritional balance, and offer insights.
-Do not request or expect meal images – only use the supplied analysis data.
+        var systemPrompt = $@"You are a helpful wellness coach generating a daily summary from the day's tracked activities.
+Entries may include meals, exercise sessions, sleep logs, and other health-related items.
+Use the provided structured analysis data to calculate nutrition totals (when meal data is available), highlight exercise and recovery patterns, and surface holistic insights.
+Do not request or expect images – only use the supplied analysis data.
 
 You MUST return a JSON object matching this exact schema:
 {GetDailySummarySchema()}
@@ -297,8 +300,8 @@ Important rules:
 - Provide empty arrays when there are no insights or recommendations
 - Use null for unknown numeric values
 - Ensure schemaVersion is ""1.0""
-- Reference meals by their entryId values when describing insights
-- If no meals are available, still return a valid JSON object with empty collections and explanations
+- Summaries should reference entryId values when describing insights
+- If no entries are available, still return a valid JSON object with empty collections and explanations
 ";
 
         var messages = new List<ChatMessage>
@@ -317,41 +320,41 @@ Important rules:
             builder.AppendLine($"SummaryTimeZone: {summaryRequest.SummaryTimeZoneId ?? "unknown"} (UTC{offsetText})");
         }
 
-        builder.AppendLine($"MealsCaptured: {summaryRequest.Meals.Count}");
-        builder.AppendLine("Meals:");
+        builder.AppendLine($"EntriesCaptured: {summaryRequest.Entries.Count}");
+        builder.AppendLine("Entries:");
 
-        foreach (var (meal, index) in summaryRequest.Meals.Select((m, i) => (m, i + 1)))
+        foreach (var (entry, index) in summaryRequest.Entries.Select((item, i) => (item, i + 1)))
         {
-            builder.AppendLine($"- Meal {index} (EntryId: {meal.EntryId})");
-            builder.AppendLine($"  CapturedAtUtc: {meal.CapturedAt:O}");
+            builder.AppendLine($"- Entry {index} (EntryId: {entry.EntryId}, EntryType: {entry.EntryType})");
+            builder.AppendLine($"  CapturedAtUtc: {entry.CapturedAt:O}");
 
-            if (meal.CapturedAtLocal != default)
+            if (entry.CapturedAtLocal != default)
             {
-                builder.AppendLine($"  CapturedAtLocal: {meal.CapturedAtLocal:O}");
+                builder.AppendLine($"  CapturedAtLocal: {entry.CapturedAtLocal:O}");
             }
             else
             {
                 builder.AppendLine("  CapturedAtLocal: unknown");
             }
 
-            var mealOffsetText = meal.UtcOffsetMinutes is int mealOffset
-                ? DateTimeConverter.FormatOffset(mealOffset)
+            var entryOffsetText = entry.UtcOffsetMinutes is int entryOffset
+                ? DateTimeConverter.FormatOffset(entryOffset)
                 : "unknown";
-            builder.AppendLine($"  TimeZone: {meal.TimeZoneId ?? "unknown"} (UTC{mealOffsetText})");
-            if (!string.IsNullOrWhiteSpace(meal.Description))
+            builder.AppendLine($"  TimeZone: {entry.TimeZoneId ?? "unknown"} (UTC{entryOffsetText})");
+            if (!string.IsNullOrWhiteSpace(entry.Description))
             {
-                builder.AppendLine($"  Description: {meal.Description}");
+                builder.AppendLine($"  Description: {entry.Description}");
             }
 
-            if (meal.Analysis is not null)
+            if (entry.Analysis is not null)
             {
-                var json = JsonSerializer.Serialize(meal.Analysis);
-                builder.AppendLine("  MealAnalysisJson: ");
+                var json = JsonSerializer.Serialize(entry.Analysis);
+                builder.AppendLine("  UnifiedAnalysisJson:");
                 builder.AppendLine(json);
             }
             else
             {
-                builder.AppendLine("  MealAnalysisJson: null");
+                builder.AppendLine("  UnifiedAnalysisJson: null");
             }
 
             builder.AppendLine();
@@ -366,6 +369,154 @@ Important rules:
         }
 
         return messages;
+    }
+
+    private static string GetUnifiedAnalysisSchema()
+    {
+        return """
+        Example meal entry:
+        {
+          "schemaVersion": "1.0",
+          "entryType": "Meal",
+          "confidence": 0.87,
+          "mealAnalysis": {
+            "schemaVersion": "1.0",
+            "foodItems": [
+              {
+                "name": "grilled salmon",
+                "portionSize": "180g",
+                "calories": 360,
+                "confidence": 0.92
+              },
+              {
+                "name": "steamed broccoli",
+                "portionSize": "1 cup",
+                "calories": 55,
+                "confidence": 0.88
+              }
+            ],
+            "nutrition": {
+              "totalCalories": 540,
+              "protein": 42,
+              "carbohydrates": 18,
+              "fat": 28,
+              "fiber": 6,
+              "sugar": 4,
+              "sodium": 510
+            },
+            "healthInsights": {
+              "healthScore": 8.2,
+              "summary": "Balanced meal with lean protein and vegetables.",
+              "positives": [
+                "High in protein",
+                "Includes cruciferous vegetables"
+              ],
+              "improvements": [
+                "Add a complex carbohydrate for sustained energy"
+              ],
+              "recommendations": [
+                "Consider adding brown rice or quinoa on the side"
+              ]
+            },
+            "confidence": 0.87,
+            "warnings": []
+          },
+          "exerciseAnalysis": null,
+          "sleepAnalysis": null,
+          "otherAnalysis": null,
+          "warnings": []
+        }
+
+        Example exercise entry:
+        {
+          "schemaVersion": "1.0",
+          "entryType": "Exercise",
+          "confidence": 0.9,
+          "mealAnalysis": null,
+          "exerciseAnalysis": {
+            "schemaVersion": "1.0",
+            "activityType": "Outdoor run",
+            "metrics": {
+              "distance": 5.2,
+              "distanceUnit": "kilometers",
+              "durationMinutes": 31.4,
+              "averagePace": "06:02 /km",
+              "averageSpeed": 9.9,
+              "speedUnit": "km/h",
+              "calories": 410,
+              "averageHeartRate": 152,
+              "maxHeartRate": 172,
+              "steps": 6800,
+              "elevationGain": 120,
+              "elevationUnit": "meters"
+            },
+            "insights": {
+              "summary": "Negative split run with steady pacing.",
+              "positives": [
+                "Strong heart rate control",
+                "Consistent pacing across splits"
+              ],
+              "improvements": [
+                "Extend cooldown with light stretching"
+              ],
+              "recommendations": [
+                "Include interval training later this week"
+              ]
+            },
+            "warnings": []
+          },
+          "sleepAnalysis": null,
+          "otherAnalysis": null,
+          "warnings": []
+        }
+
+        Example sleep entry:
+        {
+          "schemaVersion": "1.0",
+          "entryType": "Sleep",
+          "confidence": 0.82,
+          "mealAnalysis": null,
+          "exerciseAnalysis": null,
+          "sleepAnalysis": {
+            "durationHours": 7.2,
+            "sleepScore": 86,
+            "qualitySummary": "Restorative sleep with brief wake periods.",
+            "environmentNotes": [
+              "Dark room",
+              "Ambient temperature 20C"
+            ],
+            "recommendations": [
+              "Maintain consistent bedtime routine",
+              "Consider earlier screen cutoff to improve latency"
+            ]
+          },
+          "otherAnalysis": null,
+          "warnings": []
+        }
+
+        Example other entry:
+        {
+          "schemaVersion": "1.0",
+          "entryType": "Other",
+          "confidence": 0.76,
+          "mealAnalysis": null,
+          "exerciseAnalysis": null,
+          "sleepAnalysis": null,
+          "otherAnalysis": {
+            "summary": "Health-related document screenshot (lab results).",
+            "tags": [
+              "Medical",
+              "Bloodwork",
+              "Follow-up"
+            ],
+            "recommendations": [
+              "Schedule follow-up with physician",
+              "Log key biomarker changes in notes"
+            ]
+          },
+          "warnings": []
+        }
+        """;
     }
 
     private static string GetDailySummarySchema()
@@ -413,150 +564,23 @@ Important rules:
               "items": { "type": "string" },
               "description": "Actionable recommendations for future meals"
             },
-            "mealsIncluded": {
+            "entriesIncluded": {
               "type": "array",
               "items": {
                 "type": "object",
                 "properties": {
                   "entryId": { "type": "integer", "description": "TrackedEntry identifier" },
+                  "entryType": { "type": "string", "description": "EntryType string such as Meal, Exercise, Sleep, Other" },
                   "capturedAt": { "type": "string", "format": "date-time", "description": "Capture timestamp in ISO 8601" },
-                  "summary": { "type": ["string", "null"], "description": "Short note about the meal" }
+                  "summary": { "type": ["string", "null"], "description": "Short summary of what occurred" }
                 },
-                "required": ["entryId", "capturedAt", "summary"],
+                "required": ["entryId", "entryType", "capturedAt", "summary"],
                 "additionalProperties": false
               },
-              "description": "Meals represented in the summary"
+              "description": "Entries represented in the summary"
             }
           },
-          "required": ["schemaVersion", "totals", "balance", "insights", "recommendations", "mealsIncluded"],
-          "additionalProperties": false
-        }
-        """;
-    }
-
-    private static string GetMealAnalysisSchema()
-    {
-        return """
-        {
-          "type": "object",
-          "properties": {
-            "schemaVersion": {
-              "type": "string",
-              "description": "Schema version, always '1.0'"
-            },
-            "foodItems": {
-              "type": "array",
-              "description": "List of detected food items",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "description": "Name of the food item"
-                  },
-                  "portionSize": {
-                    "type": ["string", "null"],
-                    "description": "Estimated portion size (e.g., '1 cup', '150g')"
-                  },
-                  "calories": {
-                    "type": ["integer", "null"],
-                    "description": "Estimated calories for this item"
-                  },
-                  "confidence": {
-                    "type": "number",
-                    "description": "Confidence in detection (0.0 to 1.0)"
-                  }
-                },
-                "required": ["name", "portionSize", "calories", "confidence"],
-                "additionalProperties": false
-              }
-            },
-            "nutrition": {
-              "type": ["object", "null"],
-              "description": "Estimated nutritional information",
-              "properties": {
-                "totalCalories": {
-                  "type": ["integer", "null"],
-                  "description": "Total estimated calories"
-                },
-                "protein": {
-                  "type": ["number", "null"],
-                  "description": "Protein in grams"
-                },
-                "carbohydrates": {
-                  "type": ["number", "null"],
-                  "description": "Carbohydrates in grams"
-                },
-                "fat": {
-                  "type": ["number", "null"],
-                  "description": "Fat in grams"
-                },
-                "fiber": {
-                  "type": ["number", "null"],
-                  "description": "Fiber in grams"
-                },
-                "sugar": {
-                  "type": ["number", "null"],
-                  "description": "Sugar in grams"
-                },
-                "sodium": {
-                  "type": ["number", "null"],
-                  "description": "Sodium in milligrams"
-                }
-              },
-              "required": ["totalCalories", "protein", "carbohydrates", "fat", "fiber", "sugar", "sodium"],
-              "additionalProperties": false
-            },
-            "healthInsights": {
-              "type": ["object", "null"],
-              "description": "Overall health assessment",
-              "properties": {
-                "healthScore": {
-                  "type": ["number", "null"],
-                  "description": "Health score (0-10, where 10 is healthiest)"
-                },
-                "summary": {
-                  "type": ["string", "null"],
-                  "description": "Brief summary of health characteristics"
-                },
-                "positives": {
-                  "type": "array",
-                  "description": "Positive aspects of the meal",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "improvements": {
-                  "type": "array",
-                  "description": "Areas for improvement",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "recommendations": {
-                  "type": "array",
-                  "description": "Specific recommendations",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              },
-              "required": ["healthScore", "summary", "positives", "improvements", "recommendations"],
-              "additionalProperties": false
-            },
-            "confidence": {
-              "type": "number",
-              "description": "Overall confidence in the analysis (0.0 to 1.0)"
-            },
-            "warnings": {
-              "type": "array",
-              "description": "Any warnings or errors",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          "required": ["schemaVersion", "foodItems", "nutrition", "healthInsights", "confidence", "warnings"],
+          "required": ["schemaVersion", "totals", "balance", "insights", "recommendations", "entriesIncluded"],
           "additionalProperties": false
         }
         """;

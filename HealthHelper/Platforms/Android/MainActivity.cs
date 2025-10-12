@@ -2,6 +2,9 @@ using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
+using HealthHelper.Services.Share;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.Controls;
 
 namespace HealthHelper;
 
@@ -9,6 +12,7 @@ namespace HealthHelper;
     Theme = "@style/Maui.SplashTheme",
     MainLauncher = true,
     LaunchMode = LaunchMode.SingleTask,
+    Exported = true,
     ConfigurationChanges = ConfigChanges.ScreenSize |
                            ConfigChanges.Orientation |
                            ConfigChanges.UiMode |
@@ -17,6 +21,10 @@ namespace HealthHelper;
                            ConfigChanges.Density |
                            ConfigChanges.KeyboardHidden |
                            ConfigChanges.LayoutDirection)]
+[IntentFilter(
+    new[] { Intent.ActionSend },
+    Categories = new[] { Intent.CategoryDefault },
+    DataMimeType = "image/*")]
 public class MainActivity : MauiAppCompatActivity
 {
     internal const int TakePhotoRequestCode = 9001;
@@ -29,6 +37,7 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnCreate(savedInstanceState);
         Instance = this;
+        ProcessShareIntent(Intent);
     }
 
     protected override void OnDestroy()
@@ -45,6 +54,35 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnActivityResult(requestCode, resultCode, data);
         ActivityResultReceived?.Invoke(this, new ActivityResultEventArgs(requestCode, resultCode, data));
+    }
+
+    protected override void OnNewIntent(Intent? intent)
+    {
+        base.OnNewIntent(intent);
+        ProcessShareIntent(intent);
+    }
+
+    private void ProcessShareIntent(Intent? intent)
+    {
+        if (intent is null)
+        {
+            return;
+        }
+
+        if (Microsoft.Maui.Controls.Application.Current is not App app)
+        {
+            return;
+        }
+
+        using var scope = app.Services.CreateScope();
+        var processor = scope.ServiceProvider.GetService<IShareIntentProcessor>();
+        if (processor is null)
+        {
+            return;
+        }
+
+        var clonedIntent = new Intent(intent);
+        _ = processor.HandleAndroidShareAsync(clonedIntent);
     }
 }
 

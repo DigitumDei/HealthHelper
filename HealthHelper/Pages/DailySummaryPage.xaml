@@ -97,13 +97,15 @@
                 </BindableLayout.EmptyView>
             </VerticalStackLayout>
 
-            <Label Text="Meals Included"
+            <Label Text="Entries Covered"
                    Style="{StaticResource Body2Strong}" />
-            <VerticalStackLayout BindableLayout.ItemsSource="{Binding MealsIncluded}"
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding EntriesIncluded}"
                                  Spacing="8">
                 <BindableLayout.ItemTemplate>
-                    <DataTemplate x:DataType="models:MealReference">
+                    <DataTemplate x:DataType="models:DailySummaryEntryReference">
                         <VerticalStackLayout Spacing="4">
+                            <Label Text="{Binding EntryType}"
+                                   Style="{StaticResource Caption1}" />
                             <Label Text="{Binding CapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}"
                                    Style="{StaticResource Caption1}" />
                             <Label Text="{Binding Summary}"
@@ -112,7 +114,7 @@
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
                 <BindableLayout.EmptyView>
-                    <Label Text="No meals were summarized."
+                    <Label Text="No entries were summarized."
                            Style="{StaticResource Caption1}" />
                 </BindableLayout.EmptyView>
             </VerticalStackLayout>

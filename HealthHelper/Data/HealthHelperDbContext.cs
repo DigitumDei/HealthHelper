@@ -30,5 +30,11 @@ public class HealthHelperDbContext : DbContext
             .HasMany<EntryAnalysis>()
             .WithOne()
             .HasForeignKey(a => a.EntryId);
+
+        modelBuilder.Entity<TrackedEntry>()
+            .Property(e => e.EntryType)
+            .HasConversion(
+                entryType => entryType.ToStorageString(),
+                value => EntryTypeHelper.FromString(value));
     }
 }

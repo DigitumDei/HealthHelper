@@ -1,10 +1,13 @@
 using System.IO;
 using CommunityToolkit.Maui;
 using HealthHelper.Data;
+using HealthHelper.PageModels;
+using HealthHelper.Pages;
 using HealthHelper.Services.Analysis;
 using HealthHelper.Services.Logging;
 using HealthHelper.Services.Media;
 using HealthHelper.Services.Llm;
+using HealthHelper.Services.Share;
 using Microsoft.Maui.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -54,13 +57,18 @@ public static class MauiProgram
 #if ANDROID
         builder.Services.AddSingleton<IPhotoResizer, AndroidPhotoResizer>();
         builder.Services.AddSingleton<ICameraCaptureService, AndroidCameraCaptureService>();
+        builder.Services.AddScoped<IShareIntentProcessor, ShareIntentProcessor>();
 #else
         builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
         builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
 #endif
 
+        builder.Services.AddSingleton<ISharedImageDraftStore, InMemorySharedImageDraftStore>();
+        builder.Services.AddSingleton<IShareNavigationService, ShareNavigationService>();
+        builder.Services.AddScoped<ISharedImageImportService, SharedImageImportService>();
 
-        builder.Services.AddTransient<MealLogViewModel>();
+
+        builder.Services.AddTransient<EntryLogViewModel>();
         builder.Services.AddTransient<MainPage>();
 
         builder.Services.AddTransient<SettingsViewModel>();
@@ -71,6 +79,10 @@ public static class MauiProgram
 
         builder.Services.AddTransient<DailySummaryViewModel>();
         builder.Services.AddTransient<DailySummaryPage>();
+        builder.Services.AddTransient<ExerciseDetailViewModel>();
+        builder.Services.AddTransient<ExerciseDetailPage>();
+        builder.Services.AddTransient<ShareEntryViewModel>();
+        builder.Services.AddTransient<ShareEntryPage>();
 
         builder.Services.AddTransient<IAnalysisOrchestrator, AnalysisOrchestrator>();
         builder.Services.AddTransient<IDailySummaryService, DailySummaryService>();

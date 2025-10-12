@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:pageModels="clr-namespace:HealthHelper.PageModels"
+             x:Class="HealthHelper.Pages.ShareEntryPage"
+             x:DataType="pageModels:ShareEntryViewModel"
+             Title="Import Shared Image">
+    <ScrollView>
+        <VerticalStackLayout Spacing="20" Padding="24">
+            <Image Source="{Binding PreviewPath}"
+                   Aspect="AspectFit"
+                   HeightRequest="260"
+                   SemanticProperties.Description="Shared image preview" />
+
+            <Label Text="{Binding CaptureInfo}"
+                   Style="{StaticResource Caption1}" />
+
+            <Label Text="We’ll automatically determine whether this is a meal, workout, or something else."
+                   Style="{StaticResource Body1}" />
+
+            <Label Text="Description"
+                   Style="{StaticResource Body2Strong}" />
+            <Entry Text="{Binding Description}"
+                   Placeholder="Add an optional note"
+                   IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}" />
+
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}" />
+
+            <Button Text="Save Entry"
+                    Command="{Binding ConfirmCommand}"
+                    IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                    SemanticProperties.Description="Save shared entry" />
+
+            <Button Text="Cancel"
+                    Command="{Binding CancelCommand}"
+                    SemanticProperties.Description="Cancel shared entry"
+                    BackgroundColor="{StaticResource Gray200}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
