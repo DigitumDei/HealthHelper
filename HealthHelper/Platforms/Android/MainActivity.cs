@@ -12,6 +12,7 @@ namespace HealthHelper;
     Theme = "@style/Maui.SplashTheme",
     MainLauncher = true,
     LaunchMode = LaunchMode.SingleTask,
+    Exported = true,
     ConfigurationChanges = ConfigChanges.ScreenSize |
                            ConfigChanges.Orientation |
                            ConfigChanges.UiMode |
@@ -20,6 +21,10 @@ namespace HealthHelper;
                            ConfigChanges.Density |
                            ConfigChanges.KeyboardHidden |
                            ConfigChanges.LayoutDirection)]
+[IntentFilter(
+    new[] { Intent.ActionSend },
+    Categories = new[] { Intent.CategoryDefault },
+    DataMimeType = "image/*")]
 public class MainActivity : MauiAppCompatActivity
 {
     internal const int TakePhotoRequestCode = 9001;
