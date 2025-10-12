@@ -49,6 +49,19 @@ public partial class HistoricalNavigationContext : ObservableObject
     }
 
     /// <summary>
+    /// Returns the most recent breadcrumb without modifying the stack.
+    /// </summary>
+    public NavigationBreadcrumb? PeekBreadcrumb()
+    {
+        if (_breadcrumbStack.Count == 0)
+        {
+            return null;
+        }
+
+        return _breadcrumbStack[^1];
+    }
+
+    /// <summary>
     /// Pushes a breadcrumb representing the view the user is drilling down from.
     /// </summary>
     /// <remarks>The most recent breadcrumb is always the top of the stack.</remarks>

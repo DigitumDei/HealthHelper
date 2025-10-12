@@ -109,16 +109,32 @@ public class HistoricalNavigationService : IHistoricalNavigationService
                 return;
             }
 
-            var previous = _navigationContext.PopBreadcrumb();
+            var previous = _navigationContext.PeekBreadcrumb();
             if (previous is null)
             {
-                _navigationContext.Reset(HistoricalViewLevel.Today, DateTime.Today);
-                await Shell.Current.GoToAsync("//today", true).ConfigureAwait(false);
+                try
+                {
+                    await Shell.Current.GoToAsync("//today", true).ConfigureAwait(false);
+                    _navigationContext.Reset(HistoricalViewLevel.Today, DateTime.Today);
+                }
+                catch (Exception navigationEx)
+                {
+                    _logger.LogError(navigationEx, "Failed to navigate back to today.");
+                }
+
                 return;
             }
 
-            _navigationContext.SetCurrent(previous.Level, previous.Date);
-            await Shell.Current.GoToAsync("..", true).ConfigureAwait(false);
+            try
+            {
+                await Shell.Current.GoToAsync("..", true).ConfigureAwait(false);
+                _navigationContext.PopBreadcrumb();
+                _navigationContext.SetCurrent(previous.Level, previous.Date);
+            }
+            catch (Exception navigationEx)
+            {
+                _logger.LogError(navigationEx, "Failed to navigate back to previous breadcrumb.");
+            }
         }
         catch (Exception ex)
         {
@@ -164,30 +180,43 @@ public class HistoricalNavigationService : IHistoricalNavigationService
                 return;
             }
 
+            NavigationBreadcrumb? breadcrumbToPush = null;
+            if (!resetBreadcrumbs && pushCurrent)
+            {
+                breadcrumbToPush = _navigationContext.CreateCurrentBreadcrumb();
+            }
+
+            var targetRoute = useAbsoluteRoute ? $"//{route}" : route;
+
+            try
+            {
+                if (parameters is null || parameters.Count == 0)
+                {
+                    await Shell.Current.GoToAsync(targetRoute, true).ConfigureAwait(false);
+                }
+                else
+                {
+                    await Shell.Current.GoToAsync(targetRoute, true, parameters).ConfigureAwait(false);
+                }
+            }
+            catch (Exception navigationEx)
+            {
+                _logger.LogError(navigationEx, "Failed to navigate to {Route}.", route);
+                return;
+            }
+
             if (resetBreadcrumbs)
             {
                 _navigationContext.Reset(targetLevel, targetDate);
             }
             else
             {
-                if (pushCurrent)
+                if (breadcrumbToPush is not null)
                 {
-                    var breadcrumb = _navigationContext.CreateCurrentBreadcrumb();
-                    _navigationContext.PushBreadcrumb(breadcrumb);
+                    _navigationContext.PushBreadcrumb(breadcrumbToPush);
                 }
 
                 _navigationContext.SetCurrent(targetLevel, targetDate);
-            }
-
-            var targetRoute = useAbsoluteRoute ? $"//{route}" : route;
-
-            if (parameters is null || parameters.Count == 0)
-            {
-                await Shell.Current.GoToAsync(targetRoute, true).ConfigureAwait(false);
-            }
-            else
-            {
-                await Shell.Current.GoToAsync(targetRoute, true, parameters).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
