@@ -347,39 +347,19 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private async void MealsCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void EntriesCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (BindingContext is not EntryLogViewModel vm)
         {
             return;
         }
 
-        if (e.CurrentSelection.FirstOrDefault() is not MealPhoto selectedMeal)
+        if (e.CurrentSelection.FirstOrDefault() is not TrackedEntryCard selectedEntry)
         {
             return;
         }
 
-        await HandleEntrySelectionAsync(vm, selectedMeal);
-
-        if (sender is CollectionView collectionView)
-        {
-            collectionView.SelectedItem = null;
-        }
-    }
-
-    private async void ExercisesCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (BindingContext is not EntryLogViewModel vm)
-        {
-            return;
-        }
-
-        if (e.CurrentSelection.FirstOrDefault() is not ExerciseEntry selectedExercise)
-        {
-            return;
-        }
-
-        await HandleEntrySelectionAsync(vm, selectedExercise);
+        await HandleEntrySelectionAsync(vm, selectedEntry);
 
         if (sender is CollectionView collectionView)
         {

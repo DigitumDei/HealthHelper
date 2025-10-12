@@ -3,9 +3,142 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:pageModels="clr-namespace:HealthHelper.PageModels"
              xmlns:models="clr-namespace:HealthHelper.Models"
+             xmlns:templates="clr-namespace:HealthHelper.Pages.Templates"
              x:Class="HealthHelper.Pages.MainPage"
              x:DataType="pageModels:EntryLogViewModel"
              Title="Diet Tracker">
+
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <DataTemplate x:Key="MealCardTemplate" x:DataType="models:MealPhoto">
+                <Border StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                        Padding="0"
+                        Margin="0,0,0,16"
+                        BackgroundColor="Transparent"
+                        StrokeShape="RoundRectangle 12,12,12,12">
+
+                    <Grid RowDefinitions="Auto,Auto" BackgroundColor="Transparent">
+                        <Image Source="{Binding FullPath}"
+                               Aspect="AspectFill"
+                               HeightRequest="220"
+                               SemanticProperties.Description="Meal photo" />
+
+                        <Grid Grid.Row="0"
+                              BackgroundColor="#80000000"
+                              IsVisible="{Binding IsClickable, Converter={StaticResource InvertedBoolConverter}}">
+                            <VerticalStackLayout HorizontalOptions="Center"
+                                                 VerticalOptions="Center"
+                                                 Spacing="8">
+                                <ActivityIndicator IsRunning="True"
+                                                   Color="White"
+                                                   IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
+                                <Label Text="Analyzing..."
+                                       TextColor="White"
+                                       FontAttributes="Bold"
+                                       IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
+                                <Label Text="Analysis Failed - Tap to Retry"
+                                       TextColor="Orange"
+                                       FontAttributes="Bold"
+                                       IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsFailedConverter}}" />
+                                <Label Text="Analysis Skipped"
+                                       TextColor="Gray"
+                                       FontAttributes="Bold"
+                                       IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsSkippedConverter}}" />
+                            </VerticalStackLayout>
+                        </Grid>
+
+                        <VerticalStackLayout Padding="16" VerticalOptions="Start" Grid.Row="1" Spacing="4">
+                            <Label Text="Meal captured"
+                                   Style="{StaticResource Body2Strong}" />
+                            <Label Text="{Binding Description}"
+                                   Style="{StaticResource Body1}" />
+                            <Label Text="{Binding LocalCapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}"
+                                   Style="{StaticResource Caption1}" />
+                            <Label Text="Analysis Skipped"
+                                   TextColor="{StaticResource Gray500}"
+                                   FontAttributes="Bold"
+                                   IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsSkippedConverter}}" />
+                            <Label Text="Processing..."
+                                   TextColor="{StaticResource Gray500}"
+                                   FontAttributes="Bold"
+                                   IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
+                            <Label Text="Failed"
+                                   TextColor="{StaticResource Error}"
+                                   FontAttributes="Bold"
+                                   IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsFailedConverter}}" />
+                        </VerticalStackLayout>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+
+            <DataTemplate x:Key="ExerciseCardTemplate" x:DataType="models:ExerciseEntry">
+                <Border StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                        Padding="0"
+                        Margin="0,0,0,16"
+                        BackgroundColor="Transparent"
+                        StrokeShape="RoundRectangle 12,12,12,12">
+
+                    <Grid RowDefinitions="Auto,Auto" BackgroundColor="Transparent">
+                        <Image Source="{Binding PreviewPath}"
+                               Aspect="AspectFill"
+                               HeightRequest="220"
+                               SemanticProperties.Description="Exercise screenshot" />
+
+                        <Grid Grid.Row="0"
+                              BackgroundColor="#80000000"
+                              IsVisible="{Binding IsClickable, Converter={StaticResource InvertedBoolConverter}}">
+                            <VerticalStackLayout HorizontalOptions="Center"
+                                                 VerticalOptions="Center"
+                                                 Spacing="8">
+                                <ActivityIndicator IsRunning="True"
+                                                   Color="White"
+                                                   IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
+                                <Label Text="Analyzing..."
+                                       TextColor="White"
+                                       FontAttributes="Bold"
+                                       IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
+                                <Label Text="Analysis Failed - Tap to Retry"
+                                       TextColor="Orange"
+                                       FontAttributes="Bold"
+                                       IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsFailedConverter}}" />
+                                <Label Text="Analysis Skipped"
+                                       TextColor="Gray"
+                                       FontAttributes="Bold"
+                                       IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsSkippedConverter}}" />
+                            </VerticalStackLayout>
+                        </Grid>
+
+                        <VerticalStackLayout Padding="16" VerticalOptions="Start" Grid.Row="1" Spacing="4">
+                            <Label Text="Exercise entry"
+                                   Style="{StaticResource Body2Strong}" />
+                            <Label Text="{Binding Description}"
+                                   Style="{StaticResource Body1}" />
+                            <Label Text="{Binding LocalCapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}"
+                                   Style="{StaticResource Caption1}" />
+                            <Label Text="Analysis Skipped"
+                                   TextColor="{StaticResource Gray500}"
+                                   FontAttributes="Bold"
+                                   IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsSkippedConverter}}" />
+                            <Label Text="Processing..."
+                                   TextColor="{StaticResource Gray500}"
+                                   FontAttributes="Bold"
+                                   IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
+                            <Label Text="Failed"
+                                   TextColor="{StaticResource Error}"
+                                   FontAttributes="Bold"
+                                   IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsFailedConverter}}" />
+                        </VerticalStackLayout>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+
+            <templates:EntryCardTemplateSelector x:Key="EntryCardTemplateSelector"
+                                                 MealTemplate="{StaticResource MealCardTemplate}"
+                                                 ExerciseTemplate="{StaticResource ExerciseCardTemplate}" />
+        </ResourceDictionary>
+    </ContentPage.Resources>
 
     <ScrollView>
         <VerticalStackLayout Spacing="24" Padding="24,32">
@@ -81,136 +214,23 @@
                 </Grid>
             </Border>
 
-            <CollectionView ItemsSource="{Binding Meals}"
-                            Margin="0,8,0,0"
-                            SelectionMode="Single"
-                            SelectionChanged="MealsCollection_SelectionChanged">
-                <CollectionView.EmptyView>
-                    <VerticalStackLayout Padding="32" Spacing="12" HorizontalOptions="Center" VerticalOptions="Center">
-                        <Label Text="No meals tracked yet." HorizontalTextAlignment="Center" Style="{StaticResource Body1}" />
-                        <Label Text="Use the Take Photo button to start your log." HorizontalTextAlignment="Center" Style="{StaticResource Caption1}" />
-                    </VerticalStackLayout>
-                </CollectionView.EmptyView>
-                <CollectionView.ItemTemplate>
-                    <DataTemplate x:DataType="models:MealPhoto">
-                        <Border StrokeThickness="1"
-                                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
-                                Padding="0"
-                                Margin="0,0,0,16"
-                                BackgroundColor="Transparent"
-                                StrokeShape="RoundRectangle 12,12,12,12">
-
-                            <Grid RowDefinitions="Auto,Auto" BackgroundColor="Transparent">
-                                <!-- Existing image -->
-                                <Image Source="{Binding FullPath}"
-                                       Aspect="AspectFill"
-                                       HeightRequest="220"
-                                       SemanticProperties.Description="Meal photo" />
-
-                                <!-- Processing overlay (only visible when not completed) -->
-                                <Grid Grid.Row="0"
-                                      BackgroundColor="#80000000"
-                                      IsVisible="{Binding IsClickable, Converter={StaticResource InvertedBoolConverter}}">
-                                    <VerticalStackLayout HorizontalOptions="Center"
-                                                         VerticalOptions="Center"
-                                                         Spacing="8">
-                                        <ActivityIndicator IsRunning="True"
-                                                           Color="White"
-                                                           IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
-                                        <Label Text="Analyzing..."
-                                               TextColor="White"
-                                               FontAttributes="Bold"
-                                               IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
-                                        <Label Text="Analysis Failed - Tap to Retry"
-                                               TextColor="Orange"
-                                               FontAttributes="Bold"
-                                               IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsFailedConverter}}" />
-                                        <Label Text="Analysis Skipped"
-                                               TextColor="Gray"
-                                               FontAttributes="Bold"
-                                               IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsSkippedConverter}}" />
-                                    </VerticalStackLayout>
-                                </Grid>
-
-                                <!-- Existing bottom info panel -->
-                                <VerticalStackLayout Padding="16" VerticalOptions="Start" Grid.Row="1" Spacing="4">
-                                    <Label Text="Meal captured"
-                                           Style="{StaticResource Body2Strong}" />
-                                    <Label Text="{Binding LocalCapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}"
-                                           Style="{StaticResource Caption1}" />
-                                </VerticalStackLayout>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </CollectionView.ItemTemplate>
-            </CollectionView>
-
-            <Label Text="Exercise Entries"
+                        <Label Text="Recent Entries"
                    Style="{StaticResource Headline}"
                    Margin="0,24,0,0" />
 
-            <CollectionView ItemsSource="{Binding Exercises}"
+            <CollectionView ItemsSource="{Binding Entries}"
                             Margin="0,8,0,0"
                             SelectionMode="Single"
-                            SelectionChanged="ExercisesCollection_SelectionChanged">
+                            SelectionChanged="EntriesCollection_SelectionChanged"
+                            ItemTemplate="{StaticResource EntryCardTemplateSelector}">
                 <CollectionView.EmptyView>
                     <VerticalStackLayout Padding="32" Spacing="12" HorizontalOptions="Center" VerticalOptions="Center">
-                        <Label Text="No exercises tracked yet." HorizontalTextAlignment="Center" Style="{StaticResource Body1}" />
-                        <Label Text="Share fitness screenshots to add them here." HorizontalTextAlignment="Center" Style="{StaticResource Caption1}" />
+                        <Label Text="No entries tracked yet." HorizontalTextAlignment="Center" Style="{StaticResource Body1}" />
+                        <Label Text="Snap a photo or share a workout to see it here." HorizontalTextAlignment="Center" Style="{StaticResource Caption1}" />
                     </VerticalStackLayout>
                 </CollectionView.EmptyView>
-                <CollectionView.ItemTemplate>
-                    <DataTemplate x:DataType="models:ExerciseEntry">
-                        <Border StrokeThickness="1"
-                                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
-                                Padding="0"
-                                Margin="0,0,0,16"
-                                BackgroundColor="Transparent"
-                                StrokeShape="RoundRectangle 12,12,12,12">
-
-                            <Grid RowDefinitions="Auto,Auto" BackgroundColor="Transparent">
-                                <Image Source="{Binding PreviewPath}"
-                                       Aspect="AspectFill"
-                                       HeightRequest="220"
-                                       SemanticProperties.Description="Exercise screenshot" />
-
-                                <Grid Grid.Row="0"
-                                      BackgroundColor="#80000000"
-                                      IsVisible="{Binding IsClickable, Converter={StaticResource InvertedBoolConverter}}">
-                                    <VerticalStackLayout HorizontalOptions="Center"
-                                                         VerticalOptions="Center"
-                                                         Spacing="8">
-                                        <ActivityIndicator IsRunning="True"
-                                                           Color="White"
-                                                           IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
-                                        <Label Text="Analyzing..."
-                                               TextColor="White"
-                                               FontAttributes="Bold"
-                                               IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
-                                        <Label Text="Analysis Failed - Tap to Retry"
-                                               TextColor="Orange"
-                                               FontAttributes="Bold"
-                                               IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsFailedConverter}}" />
-                                        <Label Text="Analysis Skipped"
-                                               TextColor="Gray"
-                                               FontAttributes="Bold"
-                                               IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsSkippedConverter}}" />
-                                    </VerticalStackLayout>
-                                </Grid>
-
-                                <VerticalStackLayout Padding="16" VerticalOptions="Start" Grid.Row="1" Spacing="4">
-                                    <Label Text="Exercise entry"
-                                           Style="{StaticResource Body2Strong}" />
-                                    <Label Text="{Binding ExerciseType}"
-                                           Style="{StaticResource Body1}" />
-                                    <Label Text="{Binding LocalCapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}"
-                                           Style="{StaticResource Caption1}" />
-                                </VerticalStackLayout>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </CollectionView.ItemTemplate>
             </CollectionView>
+
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

@@ -15,8 +15,7 @@ public partial class EntryLogViewModel : ObservableObject
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly ILogger<EntryLogViewModel> _logger;
     private readonly SemaphoreSlim _summaryCardLock = new(1, 1);
-    public ObservableCollection<MealPhoto> Meals { get; } = new();
-    public ObservableCollection<ExerciseEntry> Exercises { get; } = new();
+    public ObservableCollection<TrackedEntryCard> Entries { get; } = new();
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GenerateDailySummaryCommand))]
@@ -337,8 +336,7 @@ public partial class EntryLogViewModel : ObservableObject
                 .Where(entry => entry.EntryType == EntryType.Unknown && entry.Payload is PendingEntryPayload)
                 .ToList();
 
-            var pendingPhotos = pendingEntries
-                .OrderByDescending(entry => entry.CapturedAt)
+            var pendingCards = pendingEntries
                 .Select(entry =>
                 {
                     if (string.IsNullOrWhiteSpace(entry.BlobPath))
@@ -347,8 +345,7 @@ public partial class EntryLogViewModel : ObservableObject
                         return null;
                     }
 
-                    var pendingPayload = entry.Payload as PendingEntryPayload;
-                    if (pendingPayload is null)
+                    if (entry.Payload is not PendingEntryPayload pendingPayload)
                     {
                         return null;
                     }
@@ -370,28 +367,29 @@ public partial class EntryLogViewModel : ObservableObject
                         entry.CapturedAt,
                         entry.CapturedAtTimeZoneId,
                         entry.CapturedAtOffsetMinutes,
-                        entry.ProcessingStatus);
+                        entry.ProcessingStatus,
+                        entryType: EntryType.Unknown);
                 })
-                .OfType<MealPhoto>()
-                .ToList();
+                .OfType<MealPhoto>();
 
-            var mealPhotos = mealEntries
-                .Where(entry => entry.BlobPath is not null && entry.Payload is MealPayload)
-                .OrderByDescending(entry => entry.CapturedAt)
+            var mealCards = mealEntries
                 .Select(entry =>
                 {
-                    var mealPayload = (MealPayload)entry.Payload!;
-                    var originalRelativePath = entry.BlobPath;
-                    var displayPathRelative = mealPayload.PreviewBlobPath ?? originalRelativePath;
-
-                    if (string.IsNullOrWhiteSpace(originalRelativePath) || string.IsNullOrWhiteSpace(displayPathRelative))
+                    if (string.IsNullOrWhiteSpace(entry.BlobPath) || entry.Payload is not MealPayload mealPayload)
                     {
-                        _logger.LogWarning("Skipping entry {EntryId} because file paths are missing.", entry.EntryId);
+                        _logger.LogWarning("Skipping entry {EntryId} because file paths or payload are missing.", entry.EntryId);
+                        return null;
+                    }
+
+                    var displayPathRelative = mealPayload.PreviewBlobPath ?? entry.BlobPath;
+                    if (string.IsNullOrWhiteSpace(displayPathRelative))
+                    {
+                        _logger.LogWarning("Skipping entry {EntryId} because preview path is missing.", entry.EntryId);
                         return null;
                     }
 
                     var displayFullPath = Path.Combine(FileSystem.AppDataDirectory, displayPathRelative);
-                    var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, originalRelativePath);
+                    var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
                     return new MealPhoto(
                         entry.EntryId,
                         displayFullPath,
@@ -402,21 +400,10 @@ public partial class EntryLogViewModel : ObservableObject
                         entry.CapturedAtOffsetMinutes,
                         entry.ProcessingStatus);
                 })
-                .OfType<MealPhoto>()
-                .ToList();
+                .OfType<MealPhoto>();
 
-            var combinedMeals = pendingPhotos
-                .Concat(mealPhotos)
-                .OrderByDescending(card => card.CapturedAtUtc)
-                .ToList();
-
-            var exerciseEntries = entries
-                .Where(entry => entry.EntryType == EntryType.Exercise)
-                .ToList();
-
-            var exerciseCards = exerciseEntries
-                .Where(entry => entry.Payload is ExercisePayload)
-                .OrderByDescending(entry => entry.CapturedAt)
+            var exerciseCards = entries
+                .Where(entry => entry.EntryType == EntryType.Exercise && entry.Payload is ExercisePayload)
                 .Select(entry =>
                 {
                     var exercisePayload = (ExercisePayload)entry.Payload!;
@@ -443,21 +430,21 @@ public partial class EntryLogViewModel : ObservableObject
                         entry.CapturedAtOffsetMinutes,
                         entry.ProcessingStatus);
                 })
-                .OfType<ExerciseEntry>()
+                .OfType<ExerciseEntry>();
+
+            var combinedCards = pendingCards
+                .Cast<TrackedEntryCard>()
+                .Concat(mealCards)
+                .Concat(exerciseCards)
+                .OrderByDescending(card => card.CapturedAtUtc)
                 .ToList();
 
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
-                Meals.Clear();
-                foreach (var mealPhoto in combinedMeals)
+                Entries.Clear();
+                foreach (var card in combinedCards)
                 {
-                    Meals.Add(mealPhoto);
-                }
-
-                Exercises.Clear();
-                foreach (var exercise in exerciseCards)
-                {
-                    Exercises.Add(exercise);
+                    Entries.Add(card);
                 }
             });
 
@@ -487,7 +474,7 @@ public partial class EntryLogViewModel : ObservableObject
                         SummaryCard = null;
                     }
 
-                    UpdateSummaryOutdatedFlag(mealEntries.Count);
+                    UpdateSummaryOutdatedFlag();
                     GenerateDailySummaryCommand.NotifyCanExecuteChanged();
                 });
             });
@@ -499,102 +486,28 @@ public partial class EntryLogViewModel : ObservableObject
         }
     }
 
-    public async Task AddPendingEntryAsync(TrackedEntry entry)
+    private TrackedEntryCard? CreateCardFromEntry(TrackedEntry entry)
     {
         if (entry is null)
         {
-            return;
+            return null;
         }
 
-        if (entry.Payload is PendingEntryPayload pendingPayload)
-        {
-            if (string.IsNullOrWhiteSpace(entry.BlobPath))
-            {
-                _logger.LogWarning("AddPendingEntryAsync: Missing original blob path for pending entry {EntryId}.", entry.EntryId);
-                return;
-            }
-
-            var displayRelativePath = pendingPayload.PreviewBlobPath ?? entry.BlobPath;
-            if (string.IsNullOrWhiteSpace(displayRelativePath))
-            {
-                _logger.LogWarning("AddPendingEntryAsync: Missing display blob path for pending entry {EntryId}.", entry.EntryId);
-                return;
-            }
-
-            var fullPath = Path.Combine(FileSystem.AppDataDirectory, displayRelativePath);
-            var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
-            var placeholder = new MealPhoto(
-                entry.EntryId,
-                fullPath,
-                originalFullPath,
-                pendingPayload.Description ?? string.Empty,
-                entry.CapturedAt,
-                entry.CapturedAtTimeZoneId,
-                entry.CapturedAtOffsetMinutes,
-                entry.ProcessingStatus);
-
-            await MainThread.InvokeOnMainThreadAsync(() => Meals.Insert(0, placeholder));
-
-            await WithSummaryCardLockAsync(async () =>
-            {
-                await MainThread.InvokeOnMainThreadAsync(() => UpdateSummaryOutdatedFlag(Meals.Count));
-            });
-
-            return;
-        }
-
-        if (entry.Payload is MealPayload mealPayload)
-        {
-            if (string.IsNullOrWhiteSpace(entry.BlobPath))
-            {
-                _logger.LogWarning("AddPendingEntryAsync: Missing original blob path for meal entry {EntryId}.", entry.EntryId);
-                return;
-            }
-
-            var displayRelativePath = mealPayload.PreviewBlobPath ?? entry.BlobPath;
-            if (string.IsNullOrWhiteSpace(displayRelativePath))
-            {
-                _logger.LogWarning("AddPendingEntryAsync: Missing display blob path for meal entry {EntryId}.", entry.EntryId);
-                return;
-            }
-
-            var fullPath = Path.Combine(FileSystem.AppDataDirectory, displayRelativePath);
-            var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
-            var mealPhoto = new MealPhoto(
-                entry.EntryId,
-                fullPath,
-                originalFullPath,
-                mealPayload.Description ?? string.Empty,
-                entry.CapturedAt,
-                entry.CapturedAtTimeZoneId,
-                entry.CapturedAtOffsetMinutes,
-                entry.ProcessingStatus);
-
-            await MainThread.InvokeOnMainThreadAsync(() => Meals.Insert(0, mealPhoto));
-
-            await WithSummaryCardLockAsync(async () =>
-            {
-                await MainThread.InvokeOnMainThreadAsync(() => UpdateSummaryOutdatedFlag(Meals.Count));
-            });
-
-            return;
-        }
-
-        if (entry.Payload is ExercisePayload exercisePayload)
+        if (entry.EntryType == EntryType.Exercise && entry.Payload is ExercisePayload exercisePayload)
         {
             var previewRelativePath = exercisePayload.PreviewBlobPath ?? exercisePayload.ScreenshotBlobPath ?? entry.BlobPath;
             var screenshotRelativePath = exercisePayload.ScreenshotBlobPath ?? entry.BlobPath;
 
             if (string.IsNullOrWhiteSpace(previewRelativePath) || string.IsNullOrWhiteSpace(screenshotRelativePath))
             {
-                _logger.LogWarning("AddPendingEntryAsync: Missing preview or screenshot path for exercise entry {EntryId}.", entry.EntryId);
-                return;
+                _logger.LogWarning("CreateCardFromEntry: Missing preview or screenshot path for exercise entry {EntryId}.", entry.EntryId);
+                return null;
             }
 
             var previewFullPath = Path.Combine(FileSystem.AppDataDirectory, previewRelativePath);
             var screenshotFullPath = Path.Combine(FileSystem.AppDataDirectory, screenshotRelativePath);
 
-            var exerciseEntry = new ExerciseEntry(
+            return new ExerciseEntry(
                 entry.EntryId,
                 previewFullPath,
                 screenshotFullPath,
@@ -604,28 +517,86 @@ public partial class EntryLogViewModel : ObservableObject
                 entry.CapturedAtTimeZoneId,
                 entry.CapturedAtOffsetMinutes,
                 entry.ProcessingStatus);
+        }
 
-            await MainThread.InvokeOnMainThreadAsync(() => Exercises.Insert(0, exerciseEntry));
+        if (entry.Payload is MealPayload mealPayload && !string.IsNullOrWhiteSpace(entry.BlobPath))
+        {
+            var displayRelativePath = mealPayload.PreviewBlobPath ?? entry.BlobPath;
+            if (string.IsNullOrWhiteSpace(displayRelativePath))
+            {
+                _logger.LogWarning("CreateCardFromEntry: Missing display blob path for meal entry {EntryId}.", entry.EntryId);
+                return null;
+            }
+
+            var fullPath = Path.Combine(FileSystem.AppDataDirectory, displayRelativePath);
+            var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
+            return new MealPhoto(
+                entry.EntryId,
+                fullPath,
+                originalFullPath,
+                mealPayload.Description ?? string.Empty,
+                entry.CapturedAt,
+                entry.CapturedAtTimeZoneId,
+                entry.CapturedAtOffsetMinutes,
+                entry.ProcessingStatus);
+        }
+
+        if (entry.Payload is PendingEntryPayload pendingPayload && !string.IsNullOrWhiteSpace(entry.BlobPath))
+        {
+            var displayRelativePath = pendingPayload.PreviewBlobPath ?? entry.BlobPath;
+            if (string.IsNullOrWhiteSpace(displayRelativePath))
+            {
+                _logger.LogWarning("CreateCardFromEntry: Missing preview blob path for pending entry {EntryId}.", entry.EntryId);
+                return null;
+            }
+
+            var fullPath = Path.Combine(FileSystem.AppDataDirectory, displayRelativePath);
+            var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
+            return new MealPhoto(
+                entry.EntryId,
+                fullPath,
+                originalFullPath,
+                pendingPayload.Description ?? string.Empty,
+                entry.CapturedAt,
+                entry.CapturedAtTimeZoneId,
+                entry.CapturedAtOffsetMinutes,
+                entry.ProcessingStatus,
+                entryType: EntryType.Unknown);
+        }
+
+        return null;
+    }
+
+    public async Task AddPendingEntryAsync(TrackedEntry entry)
+    {
+        if (entry is null)
+        {
             return;
         }
 
-        _logger.LogWarning("AddPendingEntryAsync: Unsupported entry type {EntryType} for entry {EntryId}.", entry.EntryType, entry.EntryId);
+        var card = CreateCardFromEntry(entry);
+        if (card is null)
+        {
+            _logger.LogWarning("AddPendingEntryAsync: Unsupported entry payload type {PayloadType} for entry {EntryId}.", entry.Payload?.GetType().Name ?? "null", entry.EntryId);
+            return;
+        }
+
+        await MainThread.InvokeOnMainThreadAsync(() => Entries.Insert(0, card));
+
+        await WithSummaryCardLockAsync(async () =>
+        {
+            await MainThread.InvokeOnMainThreadAsync(UpdateSummaryOutdatedFlag);
+        });
     }
 
     public async Task UpdateEntryStatusAsync(int entryId, ProcessingStatus newStatus)
     {
         await MainThread.InvokeOnMainThreadAsync(() =>
         {
-            var existingEntry = Meals.FirstOrDefault(m => m.EntryId == entryId);
+            var existingEntry = Entries.FirstOrDefault(card => card.EntryId == entryId);
             if (existingEntry is not null)
             {
                 existingEntry.ProcessingStatus = newStatus;
-            }
-
-            var existingExercise = Exercises.FirstOrDefault(e => e.EntryId == entryId);
-            if (existingExercise is not null)
-            {
-                existingExercise.ProcessingStatus = newStatus;
             }
         });
 
@@ -635,13 +606,13 @@ public partial class EntryLogViewModel : ObservableObject
             {
                 if (SummaryCard is null || SummaryCard.EntryId != entryId)
                 {
-                    UpdateSummaryOutdatedFlag(Meals.Count);
+                    UpdateSummaryOutdatedFlag();
                     return;
                 }
 
                 SummaryCard.ProcessingStatus = newStatus;
 
-                UpdateSummaryOutdatedFlag(Meals.Count);
+                UpdateSummaryOutdatedFlag();
                 GenerateDailySummaryCommand.NotifyCanExecuteChanged();
             });
         });
@@ -652,12 +623,14 @@ public partial class EntryLogViewModel : ObservableObject
         }
     }
 
-    private void UpdateSummaryOutdatedFlag(int currentMealCount)
+    private void UpdateSummaryOutdatedFlag()
     {
         if (SummaryCard is null)
         {
             return;
         }
+
+        var currentMealCount = Entries.Count(card => card.EntryType == EntryType.Meal);
 
         if (SummaryCard.ProcessingStatus == ProcessingStatus.Completed)
         {

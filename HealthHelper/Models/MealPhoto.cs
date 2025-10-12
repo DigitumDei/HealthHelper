@@ -10,10 +10,11 @@ public partial class MealPhoto : TrackedEntryCard
         DateTime capturedAtUtc,
         string? capturedAtTimeZoneId,
         int? capturedAtOffsetMinutes,
-        ProcessingStatus processingStatus)
+        ProcessingStatus processingStatus,
+        EntryType entryType = EntryType.Meal)
         : base(
             entryId,
-            EntryType.Meal,
+            entryType,
             capturedAtUtc,
             capturedAtTimeZoneId,
             capturedAtOffsetMinutes,
