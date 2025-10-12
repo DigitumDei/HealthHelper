@@ -323,6 +323,48 @@ public partial class EntryLogViewModel : ObservableObject
                 .Where(entry => entry.EntryType == EntryType.Meal)
                 .ToList();
 
+            var pendingEntries = entries
+                .Where(entry => entry.EntryType == EntryType.Unknown && entry.Payload is PendingEntryPayload)
+                .ToList();
+
+            var pendingPhotos = pendingEntries
+                .OrderByDescending(entry => entry.CapturedAt)
+                .Select(entry =>
+                {
+                    if (string.IsNullOrWhiteSpace(entry.BlobPath))
+                    {
+                        _logger.LogWarning("Skipping pending entry {EntryId} because original blob path is missing.", entry.EntryId);
+                        return null;
+                    }
+
+                    var pendingPayload = entry.Payload as PendingEntryPayload;
+                    if (pendingPayload is null)
+                    {
+                        return null;
+                    }
+
+                    var displayRelativePath = pendingPayload.PreviewBlobPath ?? entry.BlobPath;
+                    if (string.IsNullOrWhiteSpace(displayRelativePath))
+                    {
+                        _logger.LogWarning("Skipping pending entry {EntryId} because preview path is missing.", entry.EntryId);
+                        return null;
+                    }
+
+                    var displayFullPath = Path.Combine(FileSystem.AppDataDirectory, displayRelativePath);
+                    var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
+                    return new MealPhoto(
+                        entry.EntryId,
+                        displayFullPath,
+                        originalFullPath,
+                        pendingPayload.Description ?? string.Empty,
+                        entry.CapturedAt,
+                        entry.CapturedAtTimeZoneId,
+                        entry.CapturedAtOffsetMinutes,
+                        entry.ProcessingStatus);
+                })
+                .OfType<MealPhoto>()
+                .ToList();
+
             var mealPhotos = mealEntries
                 .Where(entry => entry.BlobPath is not null && entry.Payload is MealPayload)
                 .OrderByDescending(entry => entry.CapturedAt)
@@ -351,6 +393,11 @@ public partial class EntryLogViewModel : ObservableObject
                         entry.ProcessingStatus);
                 })
                 .OfType<MealPhoto>()
+                .ToList();
+
+            var combinedMeals = pendingPhotos
+                .Concat(mealPhotos)
+                .OrderByDescending(card => card.CapturedAtUtc)
                 .ToList();
 
             var exerciseEntries = entries
@@ -392,7 +439,7 @@ public partial class EntryLogViewModel : ObservableObject
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
                 Meals.Clear();
-                foreach (var mealPhoto in mealPhotos)
+                foreach (var mealPhoto in combinedMeals)
                 {
                     Meals.Add(mealPhoto);
                 }
