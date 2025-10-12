@@ -249,19 +249,25 @@ public partial class EntryLogViewModel : ObservableObject
             return;
         }
 
-        if (!SummaryCard.IsClickable)
+        var status = SummaryCard.ProcessingStatus;
+
+        if (SummaryCard.IsClickable || status is ProcessingStatus.Failed or ProcessingStatus.Skipped)
         {
-            await Shell.Current.DisplayAlertAsync(
-                "Summary Pending",
-                "Your daily summary is still processing. Please try again shortly.",
-                "OK");
+            await Shell.Current.GoToAsync(nameof(DailySummaryPage), new Dictionary<string, object>
+            {
+                { "SummaryEntryId", SummaryCard.EntryId }
+            });
             return;
         }
 
-        await Shell.Current.GoToAsync(nameof(DailySummaryPage), new Dictionary<string, object>
+        var (title, message) = status switch
         {
-            { "SummaryEntryId", SummaryCard.EntryId }
-        });
+            ProcessingStatus.Processing => ("Summary Processing", "Your daily summary is currently processing. Please try again shortly."),
+            ProcessingStatus.Pending => ("Summary Pending", "Your daily summary is queued and will resume shortly."),
+            _ => ("Summary Unavailable", "The daily summary is not ready yet. Please try again later.")
+        };
+
+        await Shell.Current.DisplayAlertAsync(title, message, "OK");
     }
 
     public async Task LoadEntriesAsync()
