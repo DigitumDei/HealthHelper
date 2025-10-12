@@ -106,12 +106,74 @@
                                 <Label Text="Analysis Skipped"
                                        TextColor="Gray"
                                        FontAttributes="Bold"
+                           IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsSkippedConverter}}" />
+                        </VerticalStackLayout>
+                    </Grid>
+
+                    <VerticalStackLayout Padding="16" VerticalOptions="Start" Grid.Row="1" Spacing="4">
+                        <Label Text="Exercise entry"
+                               Style="{StaticResource Body2Strong}" />
+                        <Label Text="{Binding Description}"
+                               Style="{StaticResource Body1}" />
+                        <Label Text="{Binding LocalCapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}"
+                               Style="{StaticResource Caption1}" />
+                            <Label Text="Analysis Skipped"
+                                   TextColor="{StaticResource Gray500}"
+                                   FontAttributes="Bold"
+                                   IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsSkippedConverter}}" />
+                            <Label Text="Processing..."
+                                   TextColor="{StaticResource Gray500}"
+                                   FontAttributes="Bold"
+                                   IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
+                            <Label Text="Failed"
+                                   TextColor="{StaticResource Error}"
+                                   FontAttributes="Bold"
+                           IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsFailedConverter}}" />
+                        </VerticalStackLayout>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+
+            <DataTemplate x:Key="SleepCardTemplate" x:DataType="models:SleepEntry">
+                <Border StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                        Padding="0"
+                        Margin="0,0,0,16"
+                        BackgroundColor="Transparent"
+                        StrokeShape="RoundRectangle 12,12,12,12">
+
+                    <Grid RowDefinitions="Auto,Auto" BackgroundColor="Transparent">
+                        <Image Source="{Binding PreviewPath}"
+                               Aspect="AspectFill"
+                               HeightRequest="220"
+                               SemanticProperties.Description="Sleep screenshot" />
+
+                        <Grid Grid.Row="0"
+                              BackgroundColor="#80000000"
+                              IsVisible="{Binding IsClickable, Converter={StaticResource InvertedBoolConverter}}">
+                            <VerticalStackLayout HorizontalOptions="Center"
+                                                 VerticalOptions="Center"
+                                                 Spacing="8">
+                                <ActivityIndicator IsRunning="True"
+                                                   Color="White"
+                                                   IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
+                                <Label Text="Analyzing..."
+                                       TextColor="White"
+                                       FontAttributes="Bold"
+                                       IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
+                                <Label Text="Analysis Failed - Tap to Retry"
+                                       TextColor="Orange"
+                                       FontAttributes="Bold"
+                                       IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsFailedConverter}}" />
+                                <Label Text="Analysis Skipped"
+                                       TextColor="Gray"
+                                       FontAttributes="Bold"
                                        IsVisible="{Binding ProcessingStatus, Converter={StaticResource IsSkippedConverter}}" />
                             </VerticalStackLayout>
                         </Grid>
 
                         <VerticalStackLayout Padding="16" VerticalOptions="Start" Grid.Row="1" Spacing="4">
-                            <Label Text="Exercise entry"
+                            <Label Text="Sleep entry"
                                    Style="{StaticResource Body2Strong}" />
                             <Label Text="{Binding Description}"
                                    Style="{StaticResource Body1}" />
@@ -136,7 +198,8 @@
 
             <templates:EntryCardTemplateSelector x:Key="EntryCardTemplateSelector"
                                                  MealTemplate="{StaticResource MealCardTemplate}"
-                                                 ExerciseTemplate="{StaticResource ExerciseCardTemplate}" />
+                                                 ExerciseTemplate="{StaticResource ExerciseCardTemplate}"
+                                                 SleepTemplate="{StaticResource SleepCardTemplate}" />
         </ResourceDictionary>
     </ContentPage.Resources>
 
