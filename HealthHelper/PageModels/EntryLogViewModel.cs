@@ -18,13 +18,14 @@ using Microsoft.Maui.Storage;
 
 namespace HealthHelper.PageModels;
 
-public partial class MealLogViewModel : ObservableObject
+public partial class EntryLogViewModel : ObservableObject
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
-    private readonly ILogger<MealLogViewModel> _logger;
+    private readonly ILogger<EntryLogViewModel> _logger;
     private readonly SemaphoreSlim _summaryCardLock = new(1, 1);
     public ObservableCollection<MealPhoto> Meals { get; } = new();
+    public ObservableCollection<ExerciseEntry> Exercises { get; } = new();
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GenerateDailySummaryCommand))]
@@ -37,7 +38,7 @@ public partial class MealLogViewModel : ObservableObject
     public bool ShowGenerateSummaryButton => SummaryCard is null;
     public bool ShowSummaryCard => SummaryCard is not null;
 
-    public MealLogViewModel(ITrackedEntryRepository trackedEntryRepository, IBackgroundAnalysisService backgroundAnalysisService, ILogger<MealLogViewModel> logger)
+    public EntryLogViewModel(ITrackedEntryRepository trackedEntryRepository, IBackgroundAnalysisService backgroundAnalysisService, ILogger<EntryLogViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
@@ -51,37 +52,55 @@ public partial class MealLogViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task GoToMealDetail(MealPhoto meal)
+    private async Task GoToEntryDetail(TrackedEntryCard entry)
     {
-        if (meal is null)
+        if (entry is null)
         {
-            _logger.LogWarning("Attempted to navigate to meal details with a null meal reference.");
+            _logger.LogWarning("Attempted to navigate to entry details with a null reference.");
             return;
         }
 
-        if (!meal.IsClickable)
+        if (!entry.IsClickable)
         {
-            _logger.LogInformation("Entry {EntryId} is not yet ready for viewing.", meal.EntryId);
+            _logger.LogInformation("Entry {EntryId} is not yet ready for viewing.", entry.EntryId);
             await Shell.Current.DisplayAlertAsync(
                 "Still Processing",
-                "This meal is still being analyzed. Please wait a moment.",
+                "This entry is still being analyzed. Please wait a moment.",
                 "OK");
             return;
         }
 
         try
         {
-            _logger.LogInformation("Navigating to meal detail for entry {EntryId}.", meal.EntryId);
-            await Shell.Current.GoToAsync(nameof(MealDetailPage),
-                new Dictionary<string, object>
-                {
-                    { "Meal", meal }
-                });
+            if (entry is MealPhoto meal)
+            {
+                _logger.LogInformation("Navigating to meal detail for entry {EntryId}.", meal.EntryId);
+                await Shell.Current.GoToAsync(nameof(MealDetailPage),
+                    new Dictionary<string, object>
+                    {
+                        { "Meal", meal }
+                    });
+                return;
+            }
+
+            if (entry is ExerciseEntry exercise)
+            {
+                _logger.LogInformation("Navigating to exercise detail for entry {EntryId}.", exercise.EntryId);
+                await Shell.Current.GoToAsync(nameof(ExerciseDetailPage),
+                    new Dictionary<string, object>
+                    {
+                        { "Exercise", exercise }
+                    });
+                return;
+            }
+
+            _logger.LogWarning("No detail page registered for entry type {EntryType}.", entry.EntryType);
+            await Shell.Current.DisplayAlertAsync("Unsupported entry", "This entry type cannot be opened yet.", "OK");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to navigate to meal detail for entry {EntryId}.", meal.EntryId);
-            await Shell.Current.DisplayAlertAsync("Navigation error", "Unable to open meal details right now.", "OK");
+            _logger.LogError(ex, "Failed to navigate to entry detail for entry {EntryId}.", entry.EntryId);
+            await Shell.Current.DisplayAlertAsync("Navigation error", "Unable to open entry details right now.", "OK");
         }
     }
 
@@ -334,12 +353,54 @@ public partial class MealLogViewModel : ObservableObject
                 .OfType<MealPhoto>()
                 .ToList();
 
+            var exerciseEntries = entries
+                .Where(entry => string.Equals(entry.EntryType, "Exercise", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var exerciseCards = exerciseEntries
+                .Where(entry => entry.Payload is ExercisePayload)
+                .OrderByDescending(entry => entry.CapturedAt)
+                .Select(entry =>
+                {
+                    var exercisePayload = (ExercisePayload)entry.Payload!;
+                    var previewRelativePath = exercisePayload.PreviewBlobPath ?? exercisePayload.ScreenshotBlobPath ?? entry.BlobPath;
+                    var screenshotRelativePath = exercisePayload.ScreenshotBlobPath ?? entry.BlobPath;
+
+                    if (string.IsNullOrWhiteSpace(previewRelativePath) || string.IsNullOrWhiteSpace(screenshotRelativePath))
+                    {
+                        _logger.LogWarning("Skipping exercise entry {EntryId} because file paths are missing.", entry.EntryId);
+                        return null;
+                    }
+
+                    var previewFullPath = Path.Combine(FileSystem.AppDataDirectory, previewRelativePath);
+                    var screenshotFullPath = Path.Combine(FileSystem.AppDataDirectory, screenshotRelativePath);
+
+                    return new ExerciseEntry(
+                        entry.EntryId,
+                        previewFullPath,
+                        screenshotFullPath,
+                        exercisePayload.Description,
+                        exercisePayload.ExerciseType,
+                        entry.CapturedAt,
+                        entry.CapturedAtTimeZoneId,
+                        entry.CapturedAtOffsetMinutes,
+                        entry.ProcessingStatus);
+                })
+                .OfType<ExerciseEntry>()
+                .ToList();
+
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
                 Meals.Clear();
                 foreach (var mealPhoto in mealPhotos)
                 {
                     Meals.Add(mealPhoto);
+                }
+
+                Exercises.Clear();
+                foreach (var exercise in exerciseCards)
+                {
+                    Exercises.Add(exercise);
                 }
             });
 
@@ -383,41 +444,78 @@ public partial class MealLogViewModel : ObservableObject
 
     public async Task AddPendingEntryAsync(TrackedEntry entry)
     {
-        var mealPayload = (MealPayload)entry.Payload!;
-        if (string.IsNullOrWhiteSpace(entry.BlobPath))
+        if (entry is null)
         {
-            _logger.LogWarning("AddPendingEntryAsync: Missing original blob path for entry {EntryId}.", entry.EntryId);
             return;
         }
 
-        var displayRelativePath = mealPayload.PreviewBlobPath ?? entry.BlobPath;
-        if (string.IsNullOrWhiteSpace(displayRelativePath))
+        if (entry.Payload is MealPayload mealPayload)
         {
-            _logger.LogWarning("AddPendingEntryAsync: Missing display blob path for entry {EntryId}.", entry.EntryId);
+            if (string.IsNullOrWhiteSpace(entry.BlobPath))
+            {
+                _logger.LogWarning("AddPendingEntryAsync: Missing original blob path for meal entry {EntryId}.", entry.EntryId);
+                return;
+            }
+
+            var displayRelativePath = mealPayload.PreviewBlobPath ?? entry.BlobPath;
+            if (string.IsNullOrWhiteSpace(displayRelativePath))
+            {
+                _logger.LogWarning("AddPendingEntryAsync: Missing display blob path for meal entry {EntryId}.", entry.EntryId);
+                return;
+            }
+
+            var fullPath = Path.Combine(FileSystem.AppDataDirectory, displayRelativePath);
+            var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
+            var mealPhoto = new MealPhoto(
+                entry.EntryId,
+                fullPath,
+                originalFullPath,
+                mealPayload.Description ?? string.Empty,
+                entry.CapturedAt,
+                entry.CapturedAtTimeZoneId,
+                entry.CapturedAtOffsetMinutes,
+                entry.ProcessingStatus);
+
+            await MainThread.InvokeOnMainThreadAsync(() => Meals.Insert(0, mealPhoto));
+
+            await WithSummaryCardLockAsync(async () =>
+            {
+                await MainThread.InvokeOnMainThreadAsync(() => UpdateSummaryOutdatedFlag(Meals.Count));
+            });
+
             return;
         }
 
-        var fullPath = Path.Combine(FileSystem.AppDataDirectory, displayRelativePath);
-        var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
-        var mealPhoto = new MealPhoto(
-            entry.EntryId,
-            fullPath,
-            originalFullPath,
-            mealPayload.Description ?? string.Empty,
-            entry.CapturedAt,
-            entry.CapturedAtTimeZoneId,
-            entry.CapturedAtOffsetMinutes,
-            entry.ProcessingStatus);
-
-        await MainThread.InvokeOnMainThreadAsync(() =>
+        if (entry.Payload is ExercisePayload exercisePayload)
         {
-            Meals.Insert(0, mealPhoto);
-        });
+            var previewRelativePath = exercisePayload.PreviewBlobPath ?? exercisePayload.ScreenshotBlobPath ?? entry.BlobPath;
+            var screenshotRelativePath = exercisePayload.ScreenshotBlobPath ?? entry.BlobPath;
 
-        await WithSummaryCardLockAsync(async () =>
-        {
-            await MainThread.InvokeOnMainThreadAsync(() => UpdateSummaryOutdatedFlag(Meals.Count));
-        });
+            if (string.IsNullOrWhiteSpace(previewRelativePath) || string.IsNullOrWhiteSpace(screenshotRelativePath))
+            {
+                _logger.LogWarning("AddPendingEntryAsync: Missing preview or screenshot path for exercise entry {EntryId}.", entry.EntryId);
+                return;
+            }
+
+            var previewFullPath = Path.Combine(FileSystem.AppDataDirectory, previewRelativePath);
+            var screenshotFullPath = Path.Combine(FileSystem.AppDataDirectory, screenshotRelativePath);
+
+            var exerciseEntry = new ExerciseEntry(
+                entry.EntryId,
+                previewFullPath,
+                screenshotFullPath,
+                exercisePayload.Description,
+                exercisePayload.ExerciseType,
+                entry.CapturedAt,
+                entry.CapturedAtTimeZoneId,
+                entry.CapturedAtOffsetMinutes,
+                entry.ProcessingStatus);
+
+            await MainThread.InvokeOnMainThreadAsync(() => Exercises.Insert(0, exerciseEntry));
+            return;
+        }
+
+        _logger.LogWarning("AddPendingEntryAsync: Unsupported entry type {EntryType} for entry {EntryId}.", entry.EntryType, entry.EntryId);
     }
 
     public async Task UpdateEntryStatusAsync(int entryId, ProcessingStatus newStatus)
@@ -428,6 +526,12 @@ public partial class MealLogViewModel : ObservableObject
             if (existingEntry is not null)
             {
                 existingEntry.ProcessingStatus = newStatus;
+            }
+
+            var existingExercise = Exercises.FirstOrDefault(e => e.EntryId == entryId);
+            if (existingExercise is not null)
+            {
+                existingExercise.ProcessingStatus = newStatus;
             }
         });
 
@@ -447,6 +551,11 @@ public partial class MealLogViewModel : ObservableObject
                 GenerateDailySummaryCommand.NotifyCanExecuteChanged();
             });
         });
+
+        if (newStatus == ProcessingStatus.Completed)
+        {
+            await LoadEntriesAsync().ConfigureAwait(false);
+        }
     }
 
     private void UpdateSummaryOutdatedFlag(int currentMealCount)
@@ -479,28 +588,25 @@ public partial class MealLogViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RetryAnalysis(MealPhoto meal)
+    private async Task RetryAnalysis(TrackedEntryCard entry)
     {
-        _logger.LogInformation("RetryAnalysis called for entry {EntryId} with status {Status}", meal.EntryId, meal.ProcessingStatus);
+        _logger.LogInformation("RetryAnalysis called for entry {EntryId} with status {Status}", entry.EntryId, entry.ProcessingStatus);
 
-        if (meal.ProcessingStatus != ProcessingStatus.Failed && meal.ProcessingStatus != ProcessingStatus.Skipped)
+        if (entry.ProcessingStatus != ProcessingStatus.Failed && entry.ProcessingStatus != ProcessingStatus.Skipped)
         {
             _logger.LogWarning("RetryAnalysis called for an entry that is not in a failed or skipped state.");
             return;
         }
 
-        _logger.LogInformation("Retrying analysis for entry {EntryId}.", meal.EntryId);
+        _logger.LogInformation("Retrying analysis for entry {EntryId}.", entry.EntryId);
 
-        // Update to pending status in UI
-        meal.ProcessingStatus = ProcessingStatus.Pending;
-        _logger.LogInformation("Status changed to Pending in UI for entry {EntryId}.", meal.EntryId);
+        entry.ProcessingStatus = ProcessingStatus.Pending;
+        _logger.LogInformation("Status changed to Pending in UI for entry {EntryId}.", entry.EntryId);
 
-        // Persist to database immediately so LoadEntriesAsync sees the correct state
-        await _trackedEntryRepository.UpdateProcessingStatusAsync(meal.EntryId, ProcessingStatus.Pending);
-        _logger.LogInformation("Status persisted to database for entry {EntryId}.", meal.EntryId);
+        await _trackedEntryRepository.UpdateProcessingStatusAsync(entry.EntryId, ProcessingStatus.Pending);
+        _logger.LogInformation("Status persisted to database for entry {EntryId}.", entry.EntryId);
 
-        // Queue for processing
-        await _backgroundAnalysisService.QueueEntryAsync(meal.EntryId);
-        _logger.LogInformation("Analysis re-queued for entry {EntryId}.", meal.EntryId);
+        await _backgroundAnalysisService.QueueEntryAsync(entry.EntryId);
+        _logger.LogInformation("Analysis re-queued for entry {EntryId}.", entry.EntryId);
     }
 }

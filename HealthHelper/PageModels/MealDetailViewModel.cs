@@ -268,151 +268,149 @@ public partial class MealDetailViewModel : ObservableObject
     {
         try
         {
-            var result = JsonSerializer.Deserialize<MealAnalysisResult>(analysis.InsightsJson);
-            if (result is null)
+            var unified = JsonSerializer.Deserialize<UnifiedAnalysisResult>(analysis.InsightsJson);
+            if (unified is null)
             {
                 return analysis.InsightsJson;
             }
 
-            var sb = new StringBuilder();
-
-            // Check for warnings first (e.g., no food detected)
-            if (result.Warnings?.Any() == true)
+            if (!string.Equals(unified.EntryType, "Meal", StringComparison.OrdinalIgnoreCase) || unified.MealAnalysis is null)
             {
-                sb.AppendLine("ℹ️ Analysis Notes:");
-                foreach (var warning in result.Warnings)
-                {
-                    sb.AppendLine($"  {warning}");
-                }
-                sb.AppendLine();
+                return "This entry was classified as a different type. Meal-specific analysis is not available.";
             }
 
-            // If no food items, show a friendly message
-            if (result.FoodItems?.Any() != true)
-            {
-                sb.AppendLine("🔍 No Food Detected");
-                sb.AppendLine();
-                sb.AppendLine("This image doesn't appear to contain any food items.");
-                sb.AppendLine();
-
-                // Show health insights summary if available (LLM might explain why)
-                if (!string.IsNullOrEmpty(result.HealthInsights?.Summary))
-                {
-                    sb.AppendLine($"{result.HealthInsights.Summary}");
-                    sb.AppendLine();
-                }
-
-                // If there's literally nothing, provide helpful guidance
-                if (string.IsNullOrEmpty(result.HealthInsights?.Summary) &&
-                    (result.Warnings == null || !result.Warnings.Any()))
-                {
-                    sb.AppendLine("💡 Tip: This app analyzes photos of meals and food items.");
-                    sb.AppendLine("Try taking a photo of your next meal for nutritional insights!");
-                }
-
-                return sb.ToString();
-            }
-
-            // Food Items
-            if (result.FoodItems?.Any() == true)
-            {
-                sb.AppendLine("🍽️ Food Items:");
-                foreach (var item in result.FoodItems)
-                {
-                    sb.Append($"  • {item.Name}");
-                    if (!string.IsNullOrEmpty(item.PortionSize))
-                    {
-                        sb.Append($" ({item.PortionSize})");
-                    }
-                    if (item.Calories.HasValue)
-                    {
-                        sb.Append($" - {item.Calories} cal");
-                    }
-                    sb.AppendLine();
-                }
-                sb.AppendLine();
-            }
-
-            // Nutrition
-            if (result.Nutrition is not null && result.Nutrition.TotalCalories.HasValue)
-            {
-                sb.AppendLine("📊 Nutrition:");
-                if (result.Nutrition.TotalCalories.HasValue)
-                {
-                    sb.AppendLine($"  Total Calories: {result.Nutrition.TotalCalories}");
-                }
-                if (result.Nutrition.Protein.HasValue)
-                {
-                    sb.AppendLine($"  Protein: {result.Nutrition.Protein:F1}g");
-                }
-                if (result.Nutrition.Carbohydrates.HasValue)
-                {
-                    sb.AppendLine($"  Carbs: {result.Nutrition.Carbohydrates:F1}g");
-                }
-                if (result.Nutrition.Fat.HasValue)
-                {
-                    sb.AppendLine($"  Fat: {result.Nutrition.Fat:F1}g");
-                }
-                if (result.Nutrition.Fiber.HasValue)
-                {
-                    sb.AppendLine($"  Fiber: {result.Nutrition.Fiber:F1}g");
-                }
-                sb.AppendLine();
-            }
-
-            // Health Insights
-            if (result.HealthInsights is not null)
-            {
-                sb.AppendLine("💚 Health Assessment:");
-                if (result.HealthInsights.HealthScore.HasValue)
-                {
-                    sb.AppendLine($"  Score: {result.HealthInsights.HealthScore:F1}/10");
-                }
-                if (!string.IsNullOrEmpty(result.HealthInsights.Summary))
-                {
-                    sb.AppendLine($"  {result.HealthInsights.Summary}");
-                }
-                sb.AppendLine();
-
-                if (result.HealthInsights.Positives?.Any() == true)
-                {
-                    sb.AppendLine("  ✅ Positives:");
-                    foreach (var positive in result.HealthInsights.Positives)
-                    {
-                        sb.AppendLine($"    • {positive}");
-                    }
-                    sb.AppendLine();
-                }
-
-                if (result.HealthInsights.Improvements?.Any() == true)
-                {
-                    sb.AppendLine("  ⚠️ Improvements:");
-                    foreach (var improvement in result.HealthInsights.Improvements)
-                    {
-                        sb.AppendLine($"    • {improvement}");
-                    }
-                    sb.AppendLine();
-                }
-
-                if (result.HealthInsights.Recommendations?.Any() == true)
-                {
-                    sb.AppendLine("  💡 Recommendations:");
-                    foreach (var recommendation in result.HealthInsights.Recommendations)
-                    {
-                        sb.AppendLine($"    • {recommendation}");
-                    }
-                }
-            }
-
-            return sb.ToString();
+            return FormatMealAnalysis(unified.MealAnalysis, unified.Warnings, unified.Confidence);
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            _logger.LogWarning(ex, "Failed to parse structured analysis, showing raw JSON.");
             return analysis.InsightsJson;
         }
     }
 
+    private static string FormatValue(double? value, string suffix)
+    {
+        return value.HasValue ? $"{value:0.##} {suffix}" : "unknown";
+    }
+
+    private string FormatMealAnalysis(MealAnalysisResult result, IEnumerable<string>? unifiedWarnings, double confidence)
+    {
+        var sb = new StringBuilder();
+
+        var combinedWarnings = new List<string>();
+        if (unifiedWarnings is not null)
+        {
+            combinedWarnings.AddRange(unifiedWarnings.Where(w => !string.IsNullOrWhiteSpace(w)));
+        }
+        if (result.Warnings?.Any() == true)
+        {
+            combinedWarnings.AddRange(result.Warnings.Where(w => !string.IsNullOrWhiteSpace(w)));
+        }
+
+        if (combinedWarnings.Any())
+        {
+            sb.AppendLine("ℹ️ Analysis Notes:");
+            foreach (var warning in combinedWarnings)
+            {
+                sb.AppendLine($"  {warning}");
+            }
+            sb.AppendLine();
+        }
+
+        if (confidence > 0)
+        {
+            sb.AppendLine($"Confidence: {(confidence * 100):0.#}%");
+            sb.AppendLine();
+        }
+
+        if (result.FoodItems?.Any() != true)
+        {
+            sb.AppendLine("🔍 No Food Detected");
+            sb.AppendLine();
+            sb.AppendLine("This image doesn't appear to contain any food items.");
+            sb.AppendLine();
+
+            if (!string.IsNullOrEmpty(result.HealthInsights?.Summary))
+            {
+                sb.AppendLine(result.HealthInsights.Summary);
+                sb.AppendLine();
+            }
+
+            if (string.IsNullOrEmpty(result.HealthInsights?.Summary) && !combinedWarnings.Any())
+            {
+                sb.AppendLine("💡 Tip: This app analyzes photos of meals. Try capturing a photo of your food for nutritional insights!");
+            }
+
+            return sb.ToString();
+        }
+
+        if (result.FoodItems is not null)
+        {
+            sb.AppendLine("🍽️ Food Items:");
+            foreach (var item in result.FoodItems)
+            {
+                var caloriesText = item.Calories.HasValue ? $"{item.Calories} kcal" : "calories unknown";
+                var portionText = item.PortionSize ?? "portion unknown";
+                sb.AppendLine($"• {item.Name} ({portionText}) - {caloriesText} (confidence {(item.Confidence * 100):0.#}%)");
+            }
+            sb.AppendLine();
+        }
+
+        if (result.Nutrition is not null)
+        {
+            sb.AppendLine("⚖️ Nutrition Estimate:");
+            sb.AppendLine($"• Calories: {FormatValue(result.Nutrition.TotalCalories, "kcal")}");
+            sb.AppendLine($"• Protein: {FormatValue(result.Nutrition.Protein, "g")}");
+            sb.AppendLine($"• Carbs: {FormatValue(result.Nutrition.Carbohydrates, "g")}");
+            sb.AppendLine($"• Fat: {FormatValue(result.Nutrition.Fat, "g")}");
+            sb.AppendLine($"• Fiber: {FormatValue(result.Nutrition.Fiber, "g")}");
+            sb.AppendLine($"• Sugar: {FormatValue(result.Nutrition.Sugar, "g")}");
+            sb.AppendLine($"• Sodium: {FormatValue(result.Nutrition.Sodium, "mg")}");
+            sb.AppendLine();
+        }
+
+        if (result.HealthInsights is not null)
+        {
+            sb.AppendLine("🩺 Health Insights:");
+            if (result.HealthInsights.HealthScore.HasValue)
+            {
+                sb.AppendLine($"• Health Score: {result.HealthInsights.HealthScore:0.0}/10");
+            }
+            if (!string.IsNullOrWhiteSpace(result.HealthInsights.Summary))
+            {
+                sb.AppendLine($"• Summary: {result.HealthInsights.Summary}");
+            }
+
+            if (result.HealthInsights.Positives?.Any() == true)
+            {
+                sb.AppendLine("• Positives:");
+                foreach (var positive in result.HealthInsights.Positives)
+                {
+                    sb.AppendLine($"   - {positive}");
+                }
+            }
+
+            if (result.HealthInsights.Improvements?.Any() == true)
+            {
+                sb.AppendLine("• Improvements:");
+                foreach (var improvement in result.HealthInsights.Improvements)
+                {
+                    sb.AppendLine($"   - {improvement}");
+                }
+            }
+
+            if (result.HealthInsights.Recommendations?.Any() == true)
+            {
+                sb.AppendLine("• Recommendations:");
+                foreach (var recommendation in result.HealthInsights.Recommendations)
+                {
+                    sb.AppendLine($"   - {recommendation}");
+                }
+            }
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
     partial void OnIsCorrectionModeChanged(bool value)
     {
         OnPropertyChanged(nameof(CorrectionToggleButtonText));

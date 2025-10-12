@@ -13,4 +13,5 @@ public interface ITrackedEntryRepository
     Task UpdateProcessingStatusAsync(int entryId, ProcessingStatus status);
     Task<TrackedEntry?> GetByIdAsync(int entryId);
     Task UpdateAsync(TrackedEntry entry);
+    Task UpdateEntryTypeAsync(int entryId, string entryType);
 }

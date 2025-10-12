@@ -109,11 +109,25 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         _context.Entry(trackedEntry).State = EntityState.Detached;
     }
 
+    public async Task UpdateEntryTypeAsync(int entryId, string entryType)
+    {
+        var trackedEntry = await _context.TrackedEntries.FindAsync(entryId);
+        if (trackedEntry is null)
+        {
+            return;
+        }
+
+        trackedEntry.EntryType = entryType;
+        await _context.SaveChangesAsync();
+        _context.Entry(trackedEntry).State = EntityState.Detached;
+    }
+
     private void DeserializePayload(TrackedEntry entry)
     {
         entry.Payload = entry.EntryType switch
         {
             "Meal" => JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload(),
+            "Exercise" => JsonSerializer.Deserialize<ExercisePayload>(entry.DataPayload) ?? new ExercisePayload(),
             "DailySummary" => NormalizeDailySummaryPayload(JsonSerializer.Deserialize<DailySummaryPayload>(entry.DataPayload)),
             _ => entry.Payload
         };

@@ -2,6 +2,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Maui.ApplicationModel.DataTransfer;
+using MauiShare = Microsoft.Maui.ApplicationModel.DataTransfer.Share;
 
 namespace HealthHelper.Services.Logging;
 
@@ -31,7 +32,7 @@ public sealed class LogFileService : ILogFileService
         var fileInfo = new FileInfo(_logFilePath);
         if (!fileInfo.Exists || fileInfo.Length == 0)
         {
-            await Share.RequestAsync(new ShareTextRequest
+            await MauiShare.RequestAsync(new ShareTextRequest
             {
                 Text = "No diagnostics log entries yet.",
                 Title = "HealthHelper Diagnostics Log"
@@ -39,7 +40,7 @@ public sealed class LogFileService : ILogFileService
             return;
         }
 
-        await Share.RequestAsync(new ShareFileRequest
+        await MauiShare.RequestAsync(new ShareFileRequest
         {
             Title = "HealthHelper Diagnostics Log",
             File = new ShareFile(_logFilePath)

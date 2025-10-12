@@ -27,7 +27,7 @@ public partial class MainPage : ContentPage
     private bool _isProcessingPending;
 
     public MainPage(
-        MealLogViewModel viewModel,
+        EntryLogViewModel viewModel,
         ITrackedEntryRepository trackedEntryRepository,
         IBackgroundAnalysisService backgroundAnalysisService,
         ILogger<MainPage> logger,
@@ -49,7 +49,7 @@ public partial class MainPage : ContentPage
     {
         base.OnAppearing();
         _backgroundAnalysisService.StatusChanged += OnEntryStatusChanged;
-        if (BindingContext is MealLogViewModel vm)
+        if (BindingContext is EntryLogViewModel vm)
         {
             await vm.LoadEntriesAsync();
         }
@@ -266,7 +266,7 @@ public partial class MainPage : ContentPage
 
         var newEntry = new TrackedEntry
         {
-            EntryType = "Meal",
+            EntryType = "Unknown",
             CapturedAt = capture.CapturedAtUtc,
             CapturedAtTimeZoneId = timeZoneId,
             CapturedAtOffsetMinutes = offsetMinutes,
@@ -288,7 +288,7 @@ public partial class MainPage : ContentPage
             entryPersisted = true;
             _logger.LogInformation("FinalizePhotoCaptureAsync: Database entry created with ID {EntryId}", newEntry.EntryId);
 
-            if (BindingContext is MealLogViewModel vm)
+            if (BindingContext is EntryLogViewModel vm)
             {
                 try
                 {
@@ -349,7 +349,7 @@ public partial class MainPage : ContentPage
 
     private async void MealsCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (BindingContext is not MealLogViewModel vm)
+        if (BindingContext is not EntryLogViewModel vm)
         {
             return;
         }
@@ -359,14 +359,7 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        if (selectedMeal.ProcessingStatus == ProcessingStatus.Failed || selectedMeal.ProcessingStatus == ProcessingStatus.Skipped)
-        {
-            await vm.RetryAnalysisCommand.ExecuteAsync(selectedMeal);
-        }
-        else if (selectedMeal.IsClickable)
-        {
-            await vm.GoToMealDetailCommand.ExecuteAsync(selectedMeal);
-        }
+        await HandleEntrySelectionAsync(vm, selectedMeal);
 
         if (sender is CollectionView collectionView)
         {
@@ -374,9 +367,41 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private async void ExercisesCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (BindingContext is not EntryLogViewModel vm)
+        {
+            return;
+        }
+
+        if (e.CurrentSelection.FirstOrDefault() is not ExerciseEntry selectedExercise)
+        {
+            return;
+        }
+
+        await HandleEntrySelectionAsync(vm, selectedExercise);
+
+        if (sender is CollectionView collectionView)
+        {
+            collectionView.SelectedItem = null;
+        }
+    }
+
+    private static async Task HandleEntrySelectionAsync(EntryLogViewModel viewModel, TrackedEntryCard entry)
+    {
+        if (entry.ProcessingStatus == ProcessingStatus.Failed || entry.ProcessingStatus == ProcessingStatus.Skipped)
+        {
+            await viewModel.RetryAnalysisCommand.ExecuteAsync(entry);
+        }
+        else if (entry.IsClickable)
+        {
+            await viewModel.GoToEntryDetailCommand.ExecuteAsync(entry);
+        }
+    }
+
     private async void OnEntryStatusChanged(object? sender, EntryStatusChangedEventArgs e)
     {
-        if (BindingContext is MealLogViewModel vm)
+        if (BindingContext is EntryLogViewModel vm)
         {
             await vm.UpdateEntryStatusAsync(e.EntryId, e.Status);
         }

@@ -38,6 +38,8 @@ public partial class App : Application
         });
     }
 
+    public IServiceProvider Services => _serviceProvider;
+
     protected override Window CreateWindow(IActivationState? activationState)
     {
         return new Window(new AppShell());

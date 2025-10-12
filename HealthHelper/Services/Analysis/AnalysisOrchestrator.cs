@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Services.Llm;
@@ -18,6 +21,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
     private readonly IAppSettingsRepository _appSettingsRepository;
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
     private readonly IDailySummaryService _dailySummaryService;
+    private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly ILLmClient _llmClient;
     private readonly MealAnalysisValidator _validator;
     private readonly ILogger<AnalysisOrchestrator> _logger;
@@ -26,6 +30,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         IAppSettingsRepository appSettingsRepository,
         IEntryAnalysisRepository entryAnalysisRepository,
         IDailySummaryService dailySummaryService,
+        ITrackedEntryRepository trackedEntryRepository,
         ILLmClient llmClient,
         MealAnalysisValidator validator,
         ILogger<AnalysisOrchestrator> logger)
@@ -33,6 +38,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         _appSettingsRepository = appSettingsRepository;
         _entryAnalysisRepository = entryAnalysisRepository;
         _dailySummaryService = dailySummaryService;
+        _trackedEntryRepository = trackedEntryRepository;
         _llmClient = llmClient;
         _validator = validator;
         _logger = logger;
@@ -50,7 +56,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
             return _dailySummaryService.GenerateAsync(entry, cancellationToken);
         }
 
-        return ProcessMealEntryAsync(entry, existingAnalysis: null, correction: null, cancellationToken);
+        return ProcessUnifiedEntryAsync(entry, existingAnalysis: null, correction: null, cancellationToken);
     }
 
     public Task<AnalysisInvocationResult> ProcessCorrectionAsync(TrackedEntry entry, EntryAnalysis existingAnalysis, string correction, CancellationToken cancellationToken = default)
@@ -72,20 +78,15 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
             return Task.FromResult(AnalysisInvocationResult.Error());
         }
 
-        return ProcessMealEntryAsync(entry, existingAnalysis, correction, cancellationToken);
+        return ProcessUnifiedEntryAsync(entry, existingAnalysis, correction, cancellationToken);
     }
 
-    private async Task<AnalysisInvocationResult> ProcessMealEntryAsync(
+    private async Task<AnalysisInvocationResult> ProcessUnifiedEntryAsync(
         TrackedEntry entry,
         EntryAnalysis? existingAnalysis,
         string? correction,
         CancellationToken cancellationToken)
     {
-        if (entry is null)
-        {
-            throw new ArgumentNullException(nameof(entry));
-        }
-
         try
         {
             var settings = await _appSettingsRepository.GetAppSettingsAsync().ConfigureAwait(false);
@@ -123,23 +124,24 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
                 return AnalysisInvocationResult.NoAnalysis();
             }
 
-            // Validate the structured response
-            var validationResult = _validator.Validate(llmResult.Analysis.InsightsJson, llmResult.Analysis.SchemaVersion);
-            if (!validationResult.IsValid)
-            {
-                _logger.LogError("Analysis validation failed for entry {EntryId}. Errors: {Errors}",
-                    entry.EntryId,
-                    string.Join("; ", validationResult.Errors));
-            }
-            else if (validationResult.Warnings.Any())
-            {
-                _logger.LogWarning("Analysis validation warnings for entry {EntryId}: {Warnings}",
-                    entry.EntryId,
-                    string.Join("; ", validationResult.Warnings));
-            }
-
             llmResult.Analysis.EntryId = entry.EntryId;
             llmResult.Analysis.CapturedAt = DateTime.UtcNow;
+
+            UnifiedAnalysisResult? unifiedResult = null;
+            try
+            {
+                unifiedResult = JsonSerializer.Deserialize<UnifiedAnalysisResult>(llmResult.Analysis.InsightsJson);
+            }
+            catch (JsonException jsonEx)
+            {
+                _logger.LogWarning(jsonEx, "Failed to deserialize unified analysis for entry {EntryId}.", entry.EntryId);
+            }
+
+            if (unifiedResult is not null)
+            {
+                await UpdateEntryTypeIfNeededAsync(entry, unifiedResult).ConfigureAwait(false);
+                ValidateMealAnalysis(entry.EntryId, unifiedResult);
+            }
 
             if (existingAnalysis is null)
             {
@@ -154,12 +156,8 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
 
             if (llmResult.Diagnostics is not null)
             {
-                var logMessage = existingAnalysis is null
-                    ? "Stored analysis for entry {EntryId} using model {Model}. Tokens used: prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}."
-                    : "Updated analysis for entry {EntryId} using model {Model}. Tokens used: prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}.";
-
                 _logger.LogInformation(
-                    logMessage,
+                    "Stored analysis for entry {EntryId} using model {Model}. Tokens used: prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}.",
                     entry.EntryId,
                     llmResult.Analysis.Model,
                     llmResult.Diagnostics.PromptTokenCount,
@@ -171,8 +169,58 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to process LLM analysis for entry {EntryId}.", entry.EntryId);
+            _logger.LogError(ex, "Failed to process analysis for entry {EntryId}.", entry.EntryId);
             return AnalysisInvocationResult.Error();
+        }
+    }
+
+    private async Task UpdateEntryTypeIfNeededAsync(TrackedEntry entry, UnifiedAnalysisResult unified)
+    {
+        var detectedType = NormalizeEntryType(unified.EntryType);
+        if (string.IsNullOrWhiteSpace(detectedType))
+        {
+            return;
+        }
+
+        if (string.Equals(entry.EntryType, detectedType, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _logger.LogInformation("Detected entry type {DetectedType} for entry {EntryId} (was {ExistingType}).", detectedType, entry.EntryId, entry.EntryType);
+        entry.EntryType = detectedType;
+        await _trackedEntryRepository.UpdateEntryTypeAsync(entry.EntryId, detectedType).ConfigureAwait(false);
+    }
+
+    private void ValidateMealAnalysis(int entryId, UnifiedAnalysisResult unified)
+    {
+        if (!string.Equals(unified.EntryType, "Meal", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (unified.MealAnalysis is null)
+        {
+            _logger.LogWarning("Meal entry {EntryId} did not include mealAnalysis payload.", entryId);
+            return;
+        }
+
+        try
+        {
+            var mealJson = JsonSerializer.Serialize(unified.MealAnalysis);
+            var validation = _validator.Validate(mealJson, unified.MealAnalysis.SchemaVersion);
+            if (!validation.IsValid)
+            {
+                _logger.LogWarning("Meal analysis validation failed for entry {EntryId}: {Errors}", entryId, string.Join("; ", validation.Errors));
+            }
+            else if (validation.Warnings.Count > 0)
+            {
+                _logger.LogInformation("Meal analysis warnings for entry {EntryId}: {Warnings}", entryId, string.Join("; ", validation.Warnings));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to validate meal analysis for entry {EntryId}.", entryId);
         }
     }
 
@@ -190,7 +238,38 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
             _ => string.Empty
         };
     }
+
+    private static string? NormalizeEntryType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (string.Equals(value, "Meal", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Meal";
+        }
+
+        if (string.Equals(value, "Exercise", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Exercise";
+        }
+
+        if (string.Equals(value, "Sleep", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Sleep";
+        }
+
+        if (string.Equals(value, "Other", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Other";
+        }
+
+        return null;
+    }
 }
+
 
 public class AnalysisInvocationResult
 {
@@ -206,9 +285,9 @@ public class AnalysisInvocationResult
     public bool RequiresCredentials { get; }
 
     public static AnalysisInvocationResult Success() => new(true);
-    public static AnalysisInvocationResult MissingCredentials(LlmProvider provider) => new(false, $"Add an API key for {provider} to enable meal analysis.", true);
-    public static AnalysisInvocationResult MissingModel(LlmProvider provider) => new(false, $"Select a model for {provider} before running meal analysis.");
-    public static AnalysisInvocationResult NotSupported(LlmProvider provider) => new(false, $"{provider} is not supported yet. Switch providers in Settings to analyze meals.");
+    public static AnalysisInvocationResult MissingCredentials(LlmProvider provider) => new(false, $"Add an API key for {provider} to enable analysis.", true);
+    public static AnalysisInvocationResult MissingModel(LlmProvider provider) => new(false, $"Select a model for {provider} before running analysis.");
+    public static AnalysisInvocationResult NotSupported(LlmProvider provider) => new(false, $"{provider} is not supported yet. Switch providers in Settings to analyze entries.");
     public static AnalysisInvocationResult NoAnalysis() => new(false, "The analysis service did not return results. Try again later.");
-    public static AnalysisInvocationResult Error() => new(false, "Meal analysis failed. You can retry from the settings page.");
+    public static AnalysisInvocationResult Error() => new(false, "Analysis failed. You can retry from the settings page.");
 }
