@@ -1,20 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using HealthHelper.Data;
 using HealthHelper.Models;
-using HealthHelper.Pages;
 using HealthHelper.Services.Analysis;
 using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Storage;
+using System.Collections.ObjectModel;
 
 namespace HealthHelper.PageModels;
 
@@ -281,7 +272,7 @@ public partial class EntryLogViewModel : ObservableObject
                 .ToList();
 
             var stuckEntries = entries
-                .Where(entry => entry.ProcessingStatus == ProcessingStatus.Processing)
+                .Where(entry => entry.ProcessingStatus == ProcessingStatus.Pending)
                 .ToList();
 
             foreach (var stuck in stuckEntries)
