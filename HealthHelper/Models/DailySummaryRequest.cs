@@ -9,16 +9,17 @@ public class DailySummaryRequest
     public DateTime SummaryDate { get; set; }
     public string? SummaryTimeZoneId { get; set; }
     public int? SummaryUtcOffsetMinutes { get; set; }
-    public List<DailySummaryMealContext> Meals { get; set; } = new();
+    public List<DailySummaryEntryContext> Entries { get; set; } = new();
 }
 
-public class DailySummaryMealContext
+public class DailySummaryEntryContext
 {
     public int EntryId { get; set; }
+    public EntryType EntryType { get; set; }
     public DateTime CapturedAt { get; set; }
     public DateTime CapturedAtLocal { get; set; }
     public string? TimeZoneId { get; set; }
     public int? UtcOffsetMinutes { get; set; }
     public string? Description { get; set; }
-    public MealAnalysisResult? Analysis { get; set; }
+    public UnifiedAnalysisResult? Analysis { get; set; }
 }

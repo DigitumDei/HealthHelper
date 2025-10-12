@@ -7,7 +7,8 @@ namespace HealthHelper.Models;
 public partial class DailySummaryCard : ObservableObject
 {
     public int EntryId { get; init; }
-    public int MealCount { get; private set; }
+    public int EntryCount { get; private set; }
+    public int MealCount => EntryCount;
     public DateTime GeneratedAt { get; private set; }
     public string? GeneratedAtTimeZoneId { get; private set; }
     public int? GeneratedAtOffsetMinutes { get; private set; }
@@ -35,26 +36,27 @@ public partial class DailySummaryCard : ObservableObject
 
     public DailySummaryCard(
         int entryId,
-        int mealCount,
+        int entryCount,
         DateTime generatedAt,
         string? generatedAtTimeZoneId,
         int? generatedAtOffsetMinutes,
         ProcessingStatus status)
     {
         EntryId = entryId;
-        MealCount = mealCount;
+        EntryCount = entryCount;
         GeneratedAt = generatedAt;
         GeneratedAtTimeZoneId = generatedAtTimeZoneId;
         GeneratedAtOffsetMinutes = generatedAtOffsetMinutes;
         processingStatus = status;
     }
 
-    public void RefreshMetadata(int mealCount, DateTime generatedAt, string? generatedAtTimeZoneId, int? generatedAtOffsetMinutes)
+    public void RefreshMetadata(int entryCount, DateTime generatedAt, string? generatedAtTimeZoneId, int? generatedAtOffsetMinutes)
     {
-        MealCount = mealCount;
+        EntryCount = entryCount;
         GeneratedAt = generatedAt;
         GeneratedAtTimeZoneId = generatedAtTimeZoneId;
         GeneratedAtOffsetMinutes = generatedAtOffsetMinutes;
+        OnPropertyChanged(nameof(EntryCount));
         OnPropertyChanged(nameof(MealCount));
         OnPropertyChanged(nameof(GeneratedAt));
         OnPropertyChanged(nameof(LocalGeneratedAt));

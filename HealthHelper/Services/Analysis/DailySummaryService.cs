@@ -73,11 +73,13 @@ public class DailySummaryService : IDailySummaryService
             var summaryOffsetMinutes = summaryEntry.CapturedAtOffsetMinutes
                 ?? (summaryTimeZone is not null ? DateTimeConverter.GetUtcOffsetMinutes(summaryTimeZone, summaryEntry.CapturedAt) : (int?)null);
 
-            var mealsForDay = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync(EntryType.Meal, summaryLocalDate, summaryTimeZone)
+            var entriesForDay = await _trackedEntryRepository
+                .GetByDayAsync(summaryLocalDate, summaryTimeZone)
                 .ConfigureAwait(false);
 
-            var completedMealEntries = mealsForDay
+            var completedEntries = entriesForDay
+                .Where(entry => entry.EntryId != summaryEntry.EntryId)
+                .Where(entry => entry.EntryType != EntryType.DailySummary)
                 .Where(entry => entry.ProcessingStatus == ProcessingStatus.Completed)
                 .OrderBy(entry => entry.CapturedAt)
                 .ToList();
@@ -99,37 +101,39 @@ public class DailySummaryService : IDailySummaryService
                 SummaryUtcOffsetMinutes = summaryOffsetMinutes
             };
 
-            foreach (var mealEntry in completedMealEntries)
+            foreach (var entry in completedEntries)
             {
-                analysesByEntry.TryGetValue(mealEntry.EntryId, out var analysisEntry);
+                analysesByEntry.TryGetValue(entry.EntryId, out var analysisEntry);
 
-                MealAnalysisResult? structuredAnalysis = null;
+                UnifiedAnalysisResult? structuredAnalysis = null;
                 if (analysisEntry is not null)
                 {
                     try
                     {
-                        structuredAnalysis = JsonSerializer.Deserialize<MealAnalysisResult>(analysisEntry.InsightsJson);
+                        structuredAnalysis = JsonSerializer.Deserialize<UnifiedAnalysisResult>(analysisEntry.InsightsJson);
                     }
                     catch (JsonException ex)
                     {
-                        _logger.LogWarning(ex, "Failed to deserialize meal analysis for entry {EntryId} when generating daily summary.", mealEntry.EntryId);
+                        _logger.LogWarning(ex, "Failed to deserialize analysis for entry {EntryId} when generating daily summary.", entry.EntryId);
                     }
                 }
 
-                var description = (mealEntry.Payload as MealPayload)?.Description;
+                var entryType = ResolveEntryType(entry, structuredAnalysis);
+                var description = ResolveEntryDescription(entry);
 
-                var mealTimeZone = DateTimeConverter.ResolveTimeZone(mealEntry.CapturedAtTimeZoneId, mealEntry.CapturedAtOffsetMinutes);
-                var mealCapturedAtLocal = DateTimeConverter.ToOriginalLocal(mealEntry.CapturedAt, mealEntry.CapturedAtTimeZoneId, mealEntry.CapturedAtOffsetMinutes, mealTimeZone);
-                var mealOffsetMinutes = mealEntry.CapturedAtOffsetMinutes
-                    ?? (mealTimeZone is not null ? DateTimeConverter.GetUtcOffsetMinutes(mealTimeZone, mealEntry.CapturedAt) : (int?)null);
+                var entryTimeZone = DateTimeConverter.ResolveTimeZone(entry.CapturedAtTimeZoneId, entry.CapturedAtOffsetMinutes);
+                var entryCapturedAtLocal = DateTimeConverter.ToOriginalLocal(entry.CapturedAt, entry.CapturedAtTimeZoneId, entry.CapturedAtOffsetMinutes, entryTimeZone);
+                var entryOffsetMinutes = entry.CapturedAtOffsetMinutes
+                    ?? (entryTimeZone is not null ? DateTimeConverter.GetUtcOffsetMinutes(entryTimeZone, entry.CapturedAt) : (int?)null);
 
-                summaryRequest.Meals.Add(new DailySummaryMealContext
+                summaryRequest.Entries.Add(new DailySummaryEntryContext
                 {
-                    EntryId = mealEntry.EntryId,
-                    CapturedAt = mealEntry.CapturedAt,
-                    CapturedAtLocal = mealCapturedAtLocal,
-                    TimeZoneId = mealEntry.CapturedAtTimeZoneId,
-                    UtcOffsetMinutes = mealOffsetMinutes,
+                    EntryId = entry.EntryId,
+                    EntryType = entryType,
+                    CapturedAt = entry.CapturedAt,
+                    CapturedAtLocal = entryCapturedAtLocal,
+                    TimeZoneId = entry.CapturedAtTimeZoneId,
+                    UtcOffsetMinutes = entryOffsetMinutes,
                     Description = description,
                     Analysis = structuredAnalysis
                 });
@@ -186,6 +190,28 @@ public class DailySummaryService : IDailySummaryService
             _logger.LogError(ex, "Failed to generate daily summary for entry {EntryId}.", summaryEntry.EntryId);
             return AnalysisInvocationResult.Error();
         }
+    }
+
+    private static EntryType ResolveEntryType(TrackedEntry entry, UnifiedAnalysisResult? analysis)
+    {
+        if (analysis is not null && EntryTypeHelper.TryParse(analysis.EntryType, out var detected) && detected != EntryType.Unknown)
+        {
+            return detected;
+        }
+
+        return entry.EntryType;
+    }
+
+    private static string? ResolveEntryDescription(TrackedEntry entry)
+    {
+        return entry.Payload switch
+        {
+            MealPayload mealPayload => mealPayload.Description,
+            ExercisePayload exercisePayload when !string.IsNullOrWhiteSpace(exercisePayload.Description) => exercisePayload.Description,
+            ExercisePayload exercisePayload => exercisePayload.ExerciseType,
+            PendingEntryPayload pendingPayload => pendingPayload.Description,
+            _ => null
+        };
     }
 
     private static string ResolveModelId(AppSettings settings)

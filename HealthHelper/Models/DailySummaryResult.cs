@@ -21,8 +21,15 @@ public class DailySummaryResult
     [JsonPropertyName("recommendations")]
     public List<string> Recommendations { get; set; } = new();
 
+    [JsonPropertyName("entriesIncluded")]
+    public List<DailySummaryEntryReference> EntriesIncluded { get; set; } = new();
+
     [JsonPropertyName("mealsIncluded")]
-    public List<MealReference> MealsIncluded { get; set; } = new();
+    public List<DailySummaryEntryReference> LegacyMealsIncluded
+    {
+        get => EntriesIncluded;
+        set => EntriesIncluded = value ?? new List<DailySummaryEntryReference>();
+    }
 }
 
 public class NutritionTotals
@@ -64,10 +71,13 @@ public class NutritionalBalance
     public string? Variety { get; set; }
 }
 
-public class MealReference
+public class DailySummaryEntryReference
 {
     [JsonPropertyName("entryId")]
     public int EntryId { get; set; }
+
+    [JsonPropertyName("entryType")]
+    public string EntryType { get; set; } = "Unknown";
 
     [JsonPropertyName("capturedAt")]
     public DateTime CapturedAt { get; set; }

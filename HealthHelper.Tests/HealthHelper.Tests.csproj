@@ -31,7 +31,18 @@
     <Compile Include="..\HealthHelper\Models\ExerciseAnalysisResult.cs" Link="Models\ExerciseAnalysisResult.cs" />
     <Compile Include="..\HealthHelper\Models\SleepAnalysisResult.cs" Link="Models\SleepAnalysisResult.cs" />
     <Compile Include="..\HealthHelper\Models\OtherAnalysisResult.cs" Link="Models\OtherAnalysisResult.cs" />
+    <Compile Include="..\HealthHelper\Models\LlmProvider.cs" Link="Models\LlmProvider.cs" />
+    <Compile Include="..\HealthHelper\Models\AppSettings.cs" Link="Models\AppSettings.cs" />
+    <Compile Include="..\HealthHelper\Models\EntryAnalysis.cs" Link="Models\EntryAnalysis.cs" />
+    <Compile Include="..\HealthHelper\Models\DailySummaryPayload.cs" Link="Models\DailySummaryPayload.cs" />
+    <Compile Include="..\HealthHelper\Models\DailySummaryRequest.cs" Link="Models\DailySummaryRequest.cs" />
+    <Compile Include="..\HealthHelper\Models\DailySummaryResult.cs" Link="Models\DailySummaryResult.cs" />
     <Compile Include="..\HealthHelper\Data\ITrackedEntryRepository.cs" Link="Data\ITrackedEntryRepository.cs" />
+    <Compile Include="..\HealthHelper\Data\IEntryAnalysisRepository.cs" Link="Data\IEntryAnalysisRepository.cs" />
+    <Compile Include="..\HealthHelper\Data\IAppSettingsRepository.cs" Link="Data\IAppSettingsRepository.cs" />
     <Compile Include="..\HealthHelper\Services\Analysis\UnifiedAnalysisApplier.cs" Link="Services\Analysis\UnifiedAnalysisApplier.cs" />
+    <Compile Include="..\HealthHelper\Services\Analysis\AnalysisInvocationResult.cs" Link="Services\Analysis\AnalysisInvocationResult.cs" />
+    <Compile Include="..\HealthHelper\Services\Analysis\DailySummaryService.cs" Link="Services\Analysis\DailySummaryService.cs" />
+    <Compile Include="..\HealthHelper\Services\Llm\ILLmClient.cs" Link="Services\Llm\ILLmClient.cs" />
   </ItemGroup>
 </Project>

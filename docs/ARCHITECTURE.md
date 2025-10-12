@@ -45,9 +45,8 @@ classDiagram
         +TakePhotoButton_Clicked()
     }
     class EntryLogViewModel {
-        +ObservableCollection<MealPhoto> Meals
-        +ObservableCollection<ExerciseEntry> Exercises
-        +AddEntry()
+        +ObservableCollection<TrackedEntryCard> Entries
+        +LoadEntriesAsync()
     }
     class ITrackedEntryRepository {
         <<interface>>
@@ -70,7 +69,7 @@ classDiagram
         +AddAsync(EntryAnalysis)
         +ListByDayAsync()
     }
-    class SummaryService {
+    class DailySummaryService {
         +GenerateDailySummaryAsync()
     }
     class IDailySummaryRepository {
@@ -87,16 +86,16 @@ classDiagram
     AnalysisOrchestrator --> ILLmClient : calls provider
     AnalysisOrchestrator --> ITrackedEntryRepository : updates entry type
     AnalysisOrchestrator --> IEntryAnalysisRepository : stores analysis
-    SummaryService --> IEntryAnalysisRepository : reads analyses
-    SummaryService --> IDailySummaryRepository : writes summary
-    EntryLogViewModel ..> SummaryService : refresh summaries
+    DailySummaryService --> IEntryAnalysisRepository : reads analyses
+    DailySummaryService --> IDailySummaryRepository : writes summary
+    EntryLogViewModel ..> DailySummaryService : refresh summaries
 ```
 
 ## Purpose & Scope
 HealthHelper is a cross-platform .NET MAUI app that captures wellbeing signals (meals today, exercise and sleep tomorrow), enriches them with user-selected LLM insights, and surfaces daily summaries. This doc outlines system layers, data flow, and extensibility points so enhancements preserve the capture → analysis → summary pipeline.
 
 ## Layered Application Structure
-- **UI Layer**: `Pages/` houses XAML views and `PageModels/` supplies presentation logic (e.g., `MainPage` + `EntryLogViewModel`). Each page binds to observable collections of type-specific entry cards (`MealPhoto`, `ExerciseEntry`) so the UI reacts instantly to repository updates and classification changes.
+- **UI Layer**: `Pages/` houses XAML views and `PageModels/` supplies presentation logic (e.g., `MainPage` + `EntryLogViewModel`). The home feed binds to a single `ObservableCollection<TrackedEntryCard>` that mixes pending captures, meals, exercise sessions, and other cards while a template selector renders the right visual for each type.
 - **Domain Models**: `Models/` defines records with a shared `TrackedEntry` root (`int EntryId`, `Guid? ExternalId`, `EntryType` enum, `CapturedAt`, `IEntryPayload Payload`, `DataSchemaVersion`). Entry types start as `EntryType.Unknown` with `PendingEntryPayload`, then the LLM classifies them and payloads migrate to type-specific implementations (`MealPayload`, `ExercisePayload`, `SleepPayload`). The `EntryType` enum provides compile-time type safety. Persist payloads as JSON via repository serializers with schema versioning (0=Pending, 1+=Typed). Analysis entities (`EntryAnalysis`, `DailySummary`, `UnifiedAnalysisResult`) live here as well.
 - **Services & Utilities**: Capture orchestration, storage adapters, and LLM provider clients belong under `Utilities/` or a dedicated `Services/` folder and are registered centrally in `MauiProgram.cs` for dependency injection.
 - **Platform Bridges**: `Platforms/` contains manifests and platform glue. Android currently uses `FileProvider` for captured photos; future heads may surface fitness sensors or sleep APIs.
@@ -105,7 +104,7 @@ HealthHelper is a cross-platform .NET MAUI app that captures wellbeing signals (
 1. **Capture / Import** – UI components invoke camera capture, share intents, or media pickers to create `TrackedEntry` instances with `EntryType.Unknown` and `PendingEntryPayload`.
 2. **Normalize** – Copy raw assets into app-owned folders (`FileSystem.AppDataDirectory/Entries/Unknown/`) and generate canonical metadata (timestamps, timezone info, EXIF data when available) before persistence.
 3. **Catalog** – Save entries through `ITrackedEntryRepository`, serialising `PendingEntryPayload` as JSON with `DataSchemaVersion=0`. Columns include auto-increment `EntryId`, optional `ExternalId` (GUID for sync), `EntryType` enum, `CapturedAt`, timezone metadata, `DataPayload`, `DataSchemaVersion`, `BlobPath`, and `ProcessingStatus`.
-4. **Classification** – After LLM analysis returns, `UnifiedAnalysisApplier` updates `EntryType` enum and converts `PendingEntryPayload` to the appropriate type-specific payload (`MealPayload`, `ExercisePayload`, etc.) with `DataSchemaVersion=1`. Repository handles deserialization based on schema version.
+4. **Classification** – After LLM analysis returns, `UnifiedAnalysisApplier` updates `EntryType` enum, converts `PendingEntryPayload` to the appropriate type-specific payload (`MealPayload`, `ExercisePayload`, etc.) with `DataSchemaVersion=1`, and relocates blobs into the entry-type storage folders. The repository handles deserialization based on schema version.
 5. **Cleanup** – When entries are removed, repositories delete associated blobs. Add retention policies or archival hooks as the dataset grows.
 
 ## LLM Processing Pipeline (Unified Analysis)
@@ -126,9 +125,9 @@ HealthHelper is a cross-platform .NET MAUI app that captures wellbeing signals (
 - **Validation**: Type-specific validators verify the appropriate analysis section is present and well-formed (e.g., `ValidateMealAnalysis`, `ValidateExerciseAnalysis`).
 
 ## Daily Summaries
-- **Aggregation**: Group analyses by local calendar day, spanning all entry types. A summarisation service assembles prompts referencing the day’s `EntryAnalysis` records.
-- **Persistence**: Store summaries in `DailySummary` rows (`Id`, `SummaryDate`, `EntryTypesCovered`, `Highlights`, `Recommendations`, `ProviderId`) keyed by an integer primary key with an optional external GUID for sync. Maintain a junction table (`DailySummaryEntryAnalyses`) capturing the association between a summary `Id` and the `AnalysisId` values it references so relationships stay normalised.
-- **Presentation**: Bind summaries to dashboard cards or dedicated pages using `ObservableCollection<DailySummary>` for live updates.
+- **Aggregation**: Group analyses by local calendar day, spanning all non-summary entry types. `DailySummaryService` builds requests that include each completed entry (and its latest unified analysis) so the LLM can reason about meals, exercise, sleep, and other activities together.
+- **Persistence**: Store summaries in `DailySummary` rows (`SummaryId`, `SummaryDate`, `Highlights`, `Recommendations`, `ExternalId`) keyed by an integer primary key with an optional external GUID for sync. Versioned payloads (`DailySummaryPayload`) capture runtime metadata such as `EntryCount` and generation timestamps. Maintain a junction table (`DailySummaryEntryAnalyses`) capturing the association between a summary `SummaryId` and the `AnalysisId` values it references so relationships stay normalised.
+- **Presentation**: The dashboard card surfaces the latest summary entry with an `EntryCount` snapshot, while the detail page renders `DailySummaryResult.entriesIncluded` so users see which activities were incorporated.
 
 ## Data Access Strategy
 - Commit to SQLite from the outset so structs stay queryable, transactional, and consistent. Choose either `sqlite-net-pcl` for lightweight mapping or `EntityFrameworkCore.Sqlite` for richer ORM features; both operate well on mobile targets.
@@ -138,7 +137,7 @@ HealthHelper is a cross-platform .NET MAUI app that captures wellbeing signals (
   - `IDailySummaryRepository` materialises summaries and their linked analyses (via the junction table) using integer keys for core relations.
   - `IAppSettingsRepository` persists provider configuration and credentials.
 - Repositories should map domain models to DTOs internally, leveraging SQLite's implicit `rowid` via `INTEGER PRIMARY KEY` columns for performance while versioning payload schemas to avoid drift. Resolve repositories through DI scopes so each user interaction receives a shared `DbContext`/connection, enabling atomic transactions across multiple repositories.
-- Coordinating services (e.g., `EntryLoggingService`, `AnalysisOrchestrator`, `SummaryService`) encapsulate workflows so UI code remains thin.
+- Coordinating services (e.g., `EntryLoggingService`, `AnalysisOrchestrator`, `DailySummaryService`) encapsulate workflows so UI code remains thin.
 
 ## Extensibility & Future Work
 - **Additional Entry Types**: Add new categories (biometrics, mood, medications) by:

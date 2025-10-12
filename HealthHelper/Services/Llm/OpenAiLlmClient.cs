@@ -125,9 +125,9 @@ public class OpenAiLlmClient : ILLmClient
             {
                 parsedResult = JsonSerializer.Deserialize<DailySummaryResult>(insights);
                 _logger.LogInformation(
-                    "Parsed structured daily summary for {SummaryDate} covering {MealCount} meals.",
+                    "Parsed structured daily summary for {SummaryDate} covering {EntryCount} entries.",
                     summaryRequest.SummaryDate.ToString("yyyy-MM-dd"),
-                    summaryRequest.Meals.Count);
+                    summaryRequest.Entries.Count);
             }
             catch (JsonException jsonEx)
             {
@@ -287,9 +287,10 @@ Important rules:
         DailySummaryRequest summaryRequest,
         string? existingSummaryJson)
     {
-        var systemPrompt = $@"You are a helpful nutrition coach generating a daily summary from prior meal analyses.
-Use the provided structured meal data to calculate totals, evaluate nutritional balance, and offer insights.
-Do not request or expect meal images – only use the supplied analysis data.
+        var systemPrompt = $@"You are a helpful wellness coach generating a daily summary from the day's tracked activities.
+Entries may include meals, exercise sessions, sleep logs, and other health-related items.
+Use the provided structured analysis data to calculate nutrition totals (when meal data is available), highlight exercise and recovery patterns, and surface holistic insights.
+Do not request or expect images – only use the supplied analysis data.
 
 You MUST return a JSON object matching this exact schema:
 {GetDailySummarySchema()}
@@ -299,8 +300,8 @@ Important rules:
 - Provide empty arrays when there are no insights or recommendations
 - Use null for unknown numeric values
 - Ensure schemaVersion is ""1.0""
-- Reference meals by their entryId values when describing insights
-- If no meals are available, still return a valid JSON object with empty collections and explanations
+- Summaries should reference entryId values when describing insights
+- If no entries are available, still return a valid JSON object with empty collections and explanations
 ";
 
         var messages = new List<ChatMessage>
@@ -319,41 +320,41 @@ Important rules:
             builder.AppendLine($"SummaryTimeZone: {summaryRequest.SummaryTimeZoneId ?? "unknown"} (UTC{offsetText})");
         }
 
-        builder.AppendLine($"MealsCaptured: {summaryRequest.Meals.Count}");
-        builder.AppendLine("Meals:");
+        builder.AppendLine($"EntriesCaptured: {summaryRequest.Entries.Count}");
+        builder.AppendLine("Entries:");
 
-        foreach (var (meal, index) in summaryRequest.Meals.Select((m, i) => (m, i + 1)))
+        foreach (var (entry, index) in summaryRequest.Entries.Select((item, i) => (item, i + 1)))
         {
-            builder.AppendLine($"- Meal {index} (EntryId: {meal.EntryId})");
-            builder.AppendLine($"  CapturedAtUtc: {meal.CapturedAt:O}");
+            builder.AppendLine($"- Entry {index} (EntryId: {entry.EntryId}, EntryType: {entry.EntryType})");
+            builder.AppendLine($"  CapturedAtUtc: {entry.CapturedAt:O}");
 
-            if (meal.CapturedAtLocal != default)
+            if (entry.CapturedAtLocal != default)
             {
-                builder.AppendLine($"  CapturedAtLocal: {meal.CapturedAtLocal:O}");
+                builder.AppendLine($"  CapturedAtLocal: {entry.CapturedAtLocal:O}");
             }
             else
             {
                 builder.AppendLine("  CapturedAtLocal: unknown");
             }
 
-            var mealOffsetText = meal.UtcOffsetMinutes is int mealOffset
-                ? DateTimeConverter.FormatOffset(mealOffset)
+            var entryOffsetText = entry.UtcOffsetMinutes is int entryOffset
+                ? DateTimeConverter.FormatOffset(entryOffset)
                 : "unknown";
-            builder.AppendLine($"  TimeZone: {meal.TimeZoneId ?? "unknown"} (UTC{mealOffsetText})");
-            if (!string.IsNullOrWhiteSpace(meal.Description))
+            builder.AppendLine($"  TimeZone: {entry.TimeZoneId ?? "unknown"} (UTC{entryOffsetText})");
+            if (!string.IsNullOrWhiteSpace(entry.Description))
             {
-                builder.AppendLine($"  Description: {meal.Description}");
+                builder.AppendLine($"  Description: {entry.Description}");
             }
 
-            if (meal.Analysis is not null)
+            if (entry.Analysis is not null)
             {
-                var json = JsonSerializer.Serialize(meal.Analysis);
-                builder.AppendLine("  MealAnalysisJson: ");
+                var json = JsonSerializer.Serialize(entry.Analysis);
+                builder.AppendLine("  UnifiedAnalysisJson:");
                 builder.AppendLine(json);
             }
             else
             {
-                builder.AppendLine("  MealAnalysisJson: null");
+                builder.AppendLine("  UnifiedAnalysisJson: null");
             }
 
             builder.AppendLine();
@@ -563,22 +564,23 @@ Important rules:
               "items": { "type": "string" },
               "description": "Actionable recommendations for future meals"
             },
-            "mealsIncluded": {
+            "entriesIncluded": {
               "type": "array",
               "items": {
                 "type": "object",
                 "properties": {
                   "entryId": { "type": "integer", "description": "TrackedEntry identifier" },
+                  "entryType": { "type": "string", "description": "EntryType string such as Meal, Exercise, Sleep, Other" },
                   "capturedAt": { "type": "string", "format": "date-time", "description": "Capture timestamp in ISO 8601" },
-                  "summary": { "type": ["string", "null"], "description": "Short note about the meal" }
+                  "summary": { "type": ["string", "null"], "description": "Short summary of what occurred" }
                 },
-                "required": ["entryId", "capturedAt", "summary"],
+                "required": ["entryId", "entryType", "capturedAt", "summary"],
                 "additionalProperties": false
               },
-              "description": "Meals represented in the summary"
+              "description": "Entries represented in the summary"
             }
           },
-          "required": ["schemaVersion", "totals", "balance", "insights", "recommendations", "mealsIncluded"],
+          "required": ["schemaVersion", "totals", "balance", "insights", "recommendations", "entriesIncluded"],
           "additionalProperties": false
         }
         """;

@@ -106,18 +106,20 @@ public partial class EntryLogViewModel : ObservableObject
         {
             IsGeneratingSummary = true;
 
-            var mealsForDay = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync(EntryType.Meal, DateTime.Now)
+            var entriesForDay = await _trackedEntryRepository
+                .GetByDayAsync(DateTime.Now)
                 .ConfigureAwait(false);
 
-            var mealCountSnapshot = mealsForDay.Count();
+            var entryCountSnapshot = entriesForDay
+                .Where(entry => entry.EntryType != EntryType.DailySummary)
+                .Count(entry => entry.ProcessingStatus == ProcessingStatus.Completed);
             var summaryCapturedAtUtc = DateTime.UtcNow;
             var (summaryTimeZoneId, summaryOffsetMinutes) = DateTimeConverter.CaptureTimeZoneMetadata(summaryCapturedAtUtc);
 
             var summaryPayload = new DailySummaryPayload
             {
                 SchemaVersion = 1,
-                MealCount = mealCountSnapshot,
+                EntryCount = entryCountSnapshot,
                 GeneratedAt = summaryCapturedAtUtc,
                 GeneratedAtTimeZoneId = summaryTimeZoneId,
                 GeneratedAtOffsetMinutes = summaryOffsetMinutes
@@ -187,13 +189,13 @@ public partial class EntryLogViewModel : ObservableObject
                 {
                     SummaryCard ??= new DailySummaryCard(
                         summaryEntry.EntryId,
-                        summaryPayload.MealCount,
+                        summaryPayload.EntryCount,
                         effectiveGeneratedAt,
                         effectiveGeneratedAtTimeZoneId,
                         effectiveGeneratedAtOffsetMinutes,
                         summaryEntry.ProcessingStatus);
                     SummaryCard.RefreshMetadata(
-                        summaryPayload.MealCount,
+                        summaryPayload.EntryCount,
                         effectiveGeneratedAt,
                         effectiveGeneratedAtTimeZoneId,
                         effectiveGeneratedAtOffsetMinutes);
@@ -321,7 +323,7 @@ public partial class EntryLogViewModel : ObservableObject
 
                 summaryCard = new DailySummaryCard(
                     summaryEntry.EntryId,
-                    payload.MealCount,
+                    payload.EntryCount,
                     generatedAt,
                     generatedAtTimeZoneId,
                     generatedAtOffsetMinutes,
@@ -462,7 +464,7 @@ public partial class EntryLogViewModel : ObservableObject
                         else if (SummaryCard is not null)
                         {
                             SummaryCard.RefreshMetadata(
-                                summaryCard.MealCount,
+                                summaryCard.EntryCount,
                                 summaryCard.GeneratedAt,
                                 summaryCard.GeneratedAtTimeZoneId,
                                 summaryCard.GeneratedAtOffsetMinutes);
@@ -481,8 +483,8 @@ public partial class EntryLogViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load meal entries.");
-            await MainThread.InvokeOnMainThreadAsync(() => Shell.Current.DisplayAlertAsync("Error", "Unable to load meals. Try again later.", "OK"));
+            _logger.LogError(ex, "Failed to load daily entries.");
+            await MainThread.InvokeOnMainThreadAsync(() => Shell.Current.DisplayAlertAsync("Error", "Unable to load entries. Try again later.", "OK"));
         }
     }
 
@@ -630,11 +632,13 @@ public partial class EntryLogViewModel : ObservableObject
             return;
         }
 
-        var currentMealCount = Entries.Count(card => card.EntryType == EntryType.Meal);
+        var currentCompletedEntryCount = Entries
+            .Where(card => card.EntryType != EntryType.DailySummary)
+            .Count(card => card.ProcessingStatus == ProcessingStatus.Completed);
 
         if (SummaryCard.ProcessingStatus == ProcessingStatus.Completed)
         {
-            SummaryCard.IsOutdated = currentMealCount > SummaryCard.MealCount;
+            SummaryCard.IsOutdated = currentCompletedEntryCount > SummaryCard.EntryCount;
             return;
         }
 

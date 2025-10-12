@@ -56,7 +56,7 @@ public partial class DailySummaryViewModel : ObservableObject
 
     public ObservableCollection<string> Insights { get; } = new();
     public ObservableCollection<string> Recommendations { get; } = new();
-    public ObservableCollection<MealReference> MealsIncluded { get; } = new();
+    public ObservableCollection<DailySummaryEntryReference> EntriesIncluded { get; } = new();
 
     public DailySummaryViewModel(
         ITrackedEntryRepository trackedEntryRepository,
@@ -93,7 +93,7 @@ public partial class DailySummaryViewModel : ObservableObject
                 StatusMessage = string.Empty;
                 Insights.Clear();
                 Recommendations.Clear();
-                MealsIncluded.Clear();
+                EntriesIncluded.Clear();
             });
 
             var entry = await _trackedEntryRepository.GetByIdAsync(SummaryEntryId).ConfigureAwait(false);
@@ -196,9 +196,9 @@ public partial class DailySummaryViewModel : ObservableObject
             Recommendations.Add(recommendation);
         }
 
-        foreach (var meal in summaryResult.MealsIncluded ?? new List<MealReference>())
+        foreach (var entry in summaryResult.EntriesIncluded ?? new List<DailySummaryEntryReference>())
         {
-            MealsIncluded.Add(meal);
+            EntriesIncluded.Add(entry);
         }
     }
 
@@ -240,10 +240,12 @@ public partial class DailySummaryViewModel : ObservableObject
             var entryTimeZone = DateTimeConverter.ResolveTimeZone(entry.CapturedAtTimeZoneId, entry.CapturedAtOffsetMinutes);
             var entryLocalDate = DateTimeConverter.ToOriginalLocal(entry.CapturedAt, entry.CapturedAtTimeZoneId, entry.CapturedAtOffsetMinutes, entryTimeZone);
 
-            var mealEntries = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync(EntryType.Meal, entryLocalDate, entryTimeZone)
+            var dayEntries = await _trackedEntryRepository
+                .GetByDayAsync(entryLocalDate, entryTimeZone)
                 .ConfigureAwait(false);
-            var mealCount = mealEntries.Count();
+            var entryCount = dayEntries
+                .Where(e => e.EntryType != EntryType.DailySummary)
+                .Count(e => e.ProcessingStatus == ProcessingStatus.Completed);
 
             var regenerateCapturedAtUtc = DateTime.UtcNow;
             var (timeZoneId, offsetMinutes) = DateTimeConverter.CaptureTimeZoneMetadata(regenerateCapturedAtUtc);
@@ -251,7 +253,7 @@ public partial class DailySummaryViewModel : ObservableObject
             var payload = new DailySummaryPayload
             {
                 SchemaVersion = 1,
-                MealCount = mealCount,
+                EntryCount = entryCount,
                 GeneratedAt = regenerateCapturedAtUtc,
                 GeneratedAtTimeZoneId = timeZoneId,
                 GeneratedAtOffsetMinutes = offsetMinutes
