@@ -1,3 +1,4 @@
+using System.IO;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Services.Analysis;
@@ -134,6 +135,83 @@ public class UnifiedAnalysisApplierTests
         Assert.Equal(1, entry.DataSchemaVersion);
     }
 
+    [Fact]
+    public async Task ApplyAsync_TypeChange_MovesAssetsIntoTypedDirectory()
+    {
+        var testId = Guid.NewGuid().ToString("N");
+        var photoFileName = $"{testId}.jpg";
+        var previewFileName = $"{testId}_preview.jpg";
+
+        var originalRelative = Path.Combine("Entries", "Unknown", photoFileName);
+        var previewRelative = Path.Combine("Entries", "Unknown", previewFileName);
+
+        var baseDirectory = AppContext.BaseDirectory;
+        var unknownDirectory = Path.Combine(baseDirectory, "Entries", "Unknown");
+        Directory.CreateDirectory(unknownDirectory);
+
+        var photoAbsolute = Path.Combine(baseDirectory, originalRelative);
+        var previewAbsolute = Path.Combine(baseDirectory, previewRelative);
+
+        await File.WriteAllTextAsync(photoAbsolute, "photo");
+        await File.WriteAllTextAsync(previewAbsolute, "preview");
+
+        var entry = new TrackedEntry
+        {
+            EntryId = 201,
+            EntryType = EntryType.Unknown,
+            BlobPath = originalRelative,
+            DataSchemaVersion = 0,
+            Payload = new PendingEntryPayload
+            {
+                Description = "pending",
+                PreviewBlobPath = previewRelative
+            }
+        };
+
+        var repository = new RecordingRepository();
+
+        try
+        {
+            await UnifiedAnalysisApplier.ApplyAsync(
+                entry,
+                detectedEntryType: EntryType.Meal,
+                repository,
+                NullLogger.Instance);
+
+            Assert.Equal(EntryType.Meal, entry.EntryType);
+            Assert.Equal(1, entry.DataSchemaVersion);
+
+            var mealPayload = Assert.IsType<MealPayload>(entry.Payload);
+            Assert.NotNull(entry.BlobPath);
+            Assert.NotNull(mealPayload.PreviewBlobPath);
+
+            var movedPhotoAbsolute = Path.Combine(baseDirectory, entry.BlobPath!);
+            var movedPreviewAbsolute = Path.Combine(baseDirectory, mealPayload.PreviewBlobPath!);
+
+            Assert.True(File.Exists(movedPhotoAbsolute));
+            Assert.True(File.Exists(movedPreviewAbsolute));
+            Assert.Contains(Path.Combine("Entries", "Meal"), entry.BlobPath!, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(Path.Combine("Entries", "Meal"), mealPayload.PreviewBlobPath!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteFile(photoAbsolute);
+            TryDeleteFile(previewAbsolute);
+
+            if (entry.BlobPath is not null)
+            {
+                TryDeleteFile(Path.Combine(baseDirectory, entry.BlobPath));
+            }
+
+            if (entry.Payload is MealPayload payload)
+            {
+                TryDeleteFile(Path.Combine(baseDirectory, payload.PreviewBlobPath!));
+            }
+
+            CleanupEmptyDirectories(Path.Combine(baseDirectory, "Entries"));
+        }
+    }
+
     private sealed class RecordingRepository : ITrackedEntryRepository
     {
         public int UpdateCallCount { get; private set; }
@@ -155,5 +233,60 @@ public class UnifiedAnalysisApplierTests
         public Task UpdateEntryTypeAsync(int entryId, EntryType entryType) => throw new NotImplementedException();
         public Task UpdateProcessingStatusAsync(int entryId, ProcessingStatus status) => throw new NotImplementedException();
         #endregion
+    }
+
+    private static void TryDeleteFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Ignore cleanup failures in tests.
+        }
+    }
+
+    private static void CleanupEmptyDirectories(string root)
+    {
+        if (!Directory.Exists(root))
+        {
+            return;
+        }
+
+        foreach (var directory in Directory.GetDirectories(root, "*", SearchOption.AllDirectories))
+        {
+            if (Directory.Exists(directory) && Directory.GetFileSystemEntries(directory).Length == 0)
+            {
+                try
+                {
+                    Directory.Delete(directory, recursive: false);
+                }
+                catch
+                {
+                    // best-effort cleanup
+                }
+            }
+        }
+
+        if (Directory.Exists(root) && Directory.GetFileSystemEntries(root).Length == 0)
+        {
+            try
+            {
+                Directory.Delete(root, recursive: false);
+            }
+            catch
+            {
+                // ignore
+            }
+        }
     }
 }
