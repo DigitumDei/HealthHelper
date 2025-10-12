@@ -22,6 +22,7 @@
     <Compile Include="..\HealthHelper\Models\PendingEntryPayload.cs" Link="Models\PendingEntryPayload.cs" />
     <Compile Include="..\HealthHelper\Models\MealPayload.cs" Link="Models\MealPayload.cs" />
     <Compile Include="..\HealthHelper\Models\ExercisePayload.cs" Link="Models\ExercisePayload.cs" />
+    <Compile Include="..\HealthHelper\Models\EntryType.cs" Link="Models\EntryType.cs" />
     <Compile Include="..\HealthHelper\Models\IEntryPayload.cs" Link="Models\IEntryPayload.cs" />
     <Compile Include="..\HealthHelper\Models\ProcessingStatus.cs" Link="Models\ProcessingStatus.cs" />
     <Compile Include="..\HealthHelper\Models\UnifiedAnalysisResult.cs" Link="Models\UnifiedAnalysisResult.cs" />

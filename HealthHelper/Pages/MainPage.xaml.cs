@@ -266,7 +266,7 @@ public partial class MainPage : ContentPage
 
         var newEntry = new TrackedEntry
         {
-            EntryType = "Unknown",
+            EntryType = EntryType.Unknown,
             CapturedAt = capture.CapturedAtUtc,
             CapturedAtTimeZoneId = timeZoneId,
             CapturedAtOffsetMinutes = offsetMinutes,

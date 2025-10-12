@@ -106,7 +106,7 @@ public sealed class SharedImageImportService : ISharedImageImportService
 
         var newEntry = new TrackedEntry
         {
-            EntryType = "Unknown",
+            EntryType = EntryType.Unknown,
             CapturedAt = capturedAtUtc,
             CapturedAtTimeZoneId = timeZoneId,
             CapturedAtOffsetMinutes = offsetMinutes,

@@ -117,7 +117,7 @@ public partial class EntryLogViewModel : ObservableObject
             IsGeneratingSummary = true;
 
             var mealsForDay = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync("Meal", DateTime.Now)
+                .GetByEntryTypeAndDayAsync(EntryType.Meal, DateTime.Now)
                 .ConfigureAwait(false);
 
             var mealCountSnapshot = mealsForDay.Count();
@@ -134,7 +134,7 @@ public partial class EntryLogViewModel : ObservableObject
             };
 
             var existingSummaryEntries = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync("DailySummary", DateTime.Now)
+                .GetByEntryTypeAndDayAsync(EntryType.DailySummary, DateTime.Now)
                 .ConfigureAwait(false);
 
             var existingSummary = existingSummaryEntries
@@ -147,7 +147,7 @@ public partial class EntryLogViewModel : ObservableObject
             {
                 summaryEntry = new TrackedEntry
                 {
-                    EntryType = "DailySummary",
+                    EntryType = EntryType.DailySummary,
                     CapturedAt = summaryCapturedAtUtc,
                     CapturedAtTimeZoneId = summaryTimeZoneId,
                     CapturedAtOffsetMinutes = summaryOffsetMinutes,
@@ -276,11 +276,11 @@ public partial class EntryLogViewModel : ObservableObject
     {
         try
         {
-            _logger.LogDebug("Loading meal entries for {Date}.", DateTime.Now.Date);
+            _logger.LogDebug("Loading tracked entries for {Date}.", DateTime.Now.Date);
             var entries = await _trackedEntryRepository.GetByDayAsync(DateTime.Now).ConfigureAwait(false);
 
             var summaryEntries = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync("DailySummary", DateTime.Now)
+                .GetByEntryTypeAndDayAsync(EntryType.DailySummary, DateTime.Now)
                 .ConfigureAwait(false);
 
             var summaryEntry = summaryEntries
@@ -320,7 +320,7 @@ public partial class EntryLogViewModel : ObservableObject
             }
 
             var mealEntries = entries
-                .Where(entry => string.Equals(entry.EntryType, "Meal", StringComparison.OrdinalIgnoreCase))
+                .Where(entry => entry.EntryType == EntryType.Meal)
                 .ToList();
 
             var mealPhotos = mealEntries
@@ -354,7 +354,7 @@ public partial class EntryLogViewModel : ObservableObject
                 .ToList();
 
             var exerciseEntries = entries
-                .Where(entry => string.Equals(entry.EntryType, "Exercise", StringComparison.OrdinalIgnoreCase))
+                .Where(entry => entry.EntryType == EntryType.Exercise)
                 .ToList();
 
             var exerciseCards = exerciseEntries

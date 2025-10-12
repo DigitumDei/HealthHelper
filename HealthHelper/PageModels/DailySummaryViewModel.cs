@@ -241,7 +241,7 @@ public partial class DailySummaryViewModel : ObservableObject
             var entryLocalDate = DateTimeConverter.ToOriginalLocal(entry.CapturedAt, entry.CapturedAtTimeZoneId, entry.CapturedAtOffsetMinutes, entryTimeZone);
 
             var mealEntries = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync("Meal", entryLocalDate, entryTimeZone)
+                .GetByEntryTypeAndDayAsync(EntryType.Meal, entryLocalDate, entryTimeZone)
                 .ConfigureAwait(false);
             var mealCount = mealEntries.Count();
 

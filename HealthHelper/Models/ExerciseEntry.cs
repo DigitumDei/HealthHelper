@@ -14,7 +14,7 @@ public partial class ExerciseEntry : TrackedEntryCard
         ProcessingStatus processingStatus)
         : base(
             entryId,
-            "Exercise",
+            EntryType.Exercise,
             capturedAtUtc,
             capturedAtTimeZoneId,
             capturedAtOffsetMinutes,

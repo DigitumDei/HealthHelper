@@ -38,7 +38,7 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         return entries;
     }
 
-    public async Task<IEnumerable<TrackedEntry>> GetByEntryTypeAndDayAsync(string entryType, DateTime date, TimeZoneInfo? timeZone = null)
+    public async Task<IEnumerable<TrackedEntry>> GetByEntryTypeAndDayAsync(EntryType entryType, DateTime date, TimeZoneInfo? timeZone = null)
     {
         var (utcStart, utcEnd) = DateTimeConverter.GetUtcBoundsForLocalDay(date, timeZone);
 
@@ -109,7 +109,7 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         _context.Entry(trackedEntry).State = EntityState.Detached;
     }
 
-    public async Task UpdateEntryTypeAsync(int entryId, string entryType)
+    public async Task UpdateEntryTypeAsync(int entryId, EntryType entryType)
     {
         var trackedEntry = await _context.TrackedEntries.FindAsync(entryId);
         if (trackedEntry is null)
@@ -132,9 +132,9 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
 
         entry.Payload = entry.EntryType switch
         {
-            "Meal" => JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload(),
-            "Exercise" => JsonSerializer.Deserialize<ExercisePayload>(entry.DataPayload) ?? new ExercisePayload(),
-            "DailySummary" => NormalizeDailySummaryPayload(JsonSerializer.Deserialize<DailySummaryPayload>(entry.DataPayload)),
+            EntryType.Meal => JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload(),
+            EntryType.Exercise => JsonSerializer.Deserialize<ExercisePayload>(entry.DataPayload) ?? new ExercisePayload(),
+            EntryType.DailySummary => NormalizeDailySummaryPayload(JsonSerializer.Deserialize<DailySummaryPayload>(entry.DataPayload)),
             _ => JsonSerializer.Deserialize<PendingEntryPayload>(entry.DataPayload) ?? new PendingEntryPayload()
         };
     }

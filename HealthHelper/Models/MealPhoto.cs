@@ -13,7 +13,7 @@ public partial class MealPhoto : TrackedEntryCard
         ProcessingStatus processingStatus)
         : base(
             entryId,
-            "Meal",
+            EntryType.Meal,
             capturedAtUtc,
             capturedAtTimeZoneId,
             capturedAtOffsetMinutes,

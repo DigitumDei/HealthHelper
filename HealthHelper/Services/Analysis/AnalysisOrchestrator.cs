@@ -51,7 +51,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
             throw new ArgumentNullException(nameof(entry));
         }
 
-        if (string.Equals(entry.EntryType, "DailySummary", StringComparison.OrdinalIgnoreCase))
+        if (entry.EntryType == EntryType.DailySummary)
         {
             return _dailySummaryService.GenerateAsync(entry, cancellationToken);
         }
@@ -72,7 +72,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
             return Task.FromResult(AnalysisInvocationResult.Error());
         }
 
-        if (string.Equals(entry.EntryType, "DailySummary", StringComparison.OrdinalIgnoreCase))
+        if (entry.EntryType == EntryType.DailySummary)
         {
             _logger.LogWarning("Corrections are not supported for daily summary entries ({EntryId}).", entry.EntryId);
             return Task.FromResult(AnalysisInvocationResult.Error());
@@ -140,14 +140,14 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
             if (unifiedResult is not null)
             {
                 var detectedType = NormalizeEntryType(unifiedResult.EntryType);
-                if (string.IsNullOrWhiteSpace(detectedType))
+                if (detectedType is null)
                 {
                     _logger.LogWarning("Unified analysis returned an unknown entry type for entry {EntryId}.", entry.EntryId);
                 }
                 else
                 {
-                    await UnifiedAnalysisApplier.ApplyAsync(entry, detectedType, _trackedEntryRepository, _logger).ConfigureAwait(false);
-                    ValidateUnifiedAnalysis(entry.EntryId, detectedType, unifiedResult);
+                    await UnifiedAnalysisApplier.ApplyAsync(entry, detectedType.Value, _trackedEntryRepository, _logger).ConfigureAwait(false);
+                    ValidateUnifiedAnalysis(entry.EntryId, detectedType.Value, unifiedResult);
                 }
             }
 
@@ -182,20 +182,20 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         }
     }
 
-    private void ValidateUnifiedAnalysis(int entryId, string detectedType, UnifiedAnalysisResult unified)
+    private void ValidateUnifiedAnalysis(int entryId, EntryType detectedType, UnifiedAnalysisResult unified)
     {
         switch (detectedType)
         {
-            case "Meal":
+            case EntryType.Meal:
                 ValidateMealAnalysis(entryId, unified);
                 break;
-            case "Exercise":
+            case EntryType.Exercise:
                 ValidateExerciseAnalysis(entryId, unified);
                 break;
-            case "Sleep":
+            case EntryType.Sleep:
                 ValidateSleepAnalysis(entryId, unified);
                 break;
-            case "Other":
+            case EntryType.Other:
                 ValidateOtherAnalysis(entryId, unified);
                 break;
             default:
@@ -276,34 +276,14 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         };
     }
 
-    private static string? NormalizeEntryType(string? value)
+    private static EntryType? NormalizeEntryType(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (!EntryTypeHelper.TryParse(value, out var entryType))
         {
             return null;
         }
 
-        if (string.Equals(value, "Meal", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Meal";
-        }
-
-        if (string.Equals(value, "Exercise", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Exercise";
-        }
-
-        if (string.Equals(value, "Sleep", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Sleep";
-        }
-
-        if (string.Equals(value, "Other", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Other";
-        }
-
-        return null;
+        return entryType;
     }
 }
 

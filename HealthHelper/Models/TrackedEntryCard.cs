@@ -7,7 +7,7 @@ public abstract partial class TrackedEntryCard : ObservableObject
 {
     protected TrackedEntryCard(
         int entryId,
-        string entryType,
+        EntryType entryType,
         DateTime capturedAtUtc,
         string? capturedAtTimeZoneId,
         int? capturedAtOffsetMinutes,
@@ -22,7 +22,7 @@ public abstract partial class TrackedEntryCard : ObservableObject
     }
 
     public int EntryId { get; }
-    public string EntryType { get; }
+    public EntryType EntryType { get; }
     public DateTime CapturedAtUtc { get; }
     public string? CapturedAtTimeZoneId { get; }
     public int? CapturedAtOffsetMinutes { get; }

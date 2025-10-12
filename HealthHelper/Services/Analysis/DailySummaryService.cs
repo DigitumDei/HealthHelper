@@ -74,7 +74,7 @@ public class DailySummaryService : IDailySummaryService
                 ?? (summaryTimeZone is not null ? DateTimeConverter.GetUtcOffsetMinutes(summaryTimeZone, summaryEntry.CapturedAt) : (int?)null);
 
             var mealsForDay = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync("Meal", summaryLocalDate, summaryTimeZone)
+                .GetByEntryTypeAndDayAsync(EntryType.Meal, summaryLocalDate, summaryTimeZone)
                 .ConfigureAwait(false);
 
             var completedMealEntries = mealsForDay

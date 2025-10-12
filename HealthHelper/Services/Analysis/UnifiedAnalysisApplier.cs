@@ -12,7 +12,7 @@ internal static class UnifiedAnalysisApplier
 {
     public static async Task ApplyAsync(
         TrackedEntry entry,
-        string detectedEntryType,
+        EntryType detectedEntryType,
         ITrackedEntryRepository repository,
         ILogger logger)
     {
@@ -29,12 +29,6 @@ internal static class UnifiedAnalysisApplier
         if (logger is null)
         {
             throw new ArgumentNullException(nameof(logger));
-        }
-
-        if (string.IsNullOrWhiteSpace(detectedEntryType))
-        {
-            logger.LogWarning("Skipping classification update for entry {EntryId}; detected type was empty.", entry.EntryId);
-            return;
         }
 
         var originalType = entry.EntryType;
@@ -56,7 +50,7 @@ internal static class UnifiedAnalysisApplier
             }
         }
 
-        var typeChanged = !string.Equals(originalType, detectedEntryType, StringComparison.OrdinalIgnoreCase);
+        var typeChanged = originalType != detectedEntryType;
         if (!typeChanged && !payloadConverted)
         {
             return;
@@ -69,12 +63,12 @@ internal static class UnifiedAnalysisApplier
         logger.LogInformation(
             "Updated entry {EntryId} classification to {EntryType} (payload={PayloadType}, schemaVersion={SchemaVersion}).",
             entry.EntryId,
-            entry.EntryType,
+            entry.EntryType.ToStorageString(),
             entry.Payload.GetType().Name,
             entry.DataSchemaVersion);
     }
 
-    internal static IEntryPayload ConvertPendingPayload(TrackedEntry entry, PendingEntryPayload pendingPayload, string detectedEntryType)
+    internal static IEntryPayload ConvertPendingPayload(TrackedEntry entry, PendingEntryPayload pendingPayload, EntryType detectedEntryType)
     {
         if (entry is null)
         {
@@ -88,12 +82,12 @@ internal static class UnifiedAnalysisApplier
 
         return detectedEntryType switch
         {
-            "Meal" => new MealPayload
+            EntryType.Meal => new MealPayload
             {
                 Description = pendingPayload.Description,
                 PreviewBlobPath = pendingPayload.PreviewBlobPath ?? entry.BlobPath
             },
-            "Exercise" => new ExercisePayload
+            EntryType.Exercise => new ExercisePayload
             {
                 Description = pendingPayload.Description,
                 PreviewBlobPath = pendingPayload.PreviewBlobPath ?? entry.BlobPath,

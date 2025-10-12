@@ -14,7 +14,7 @@ public class UnifiedAnalysisApplierTests
         var entry = new TrackedEntry
         {
             EntryId = 42,
-            EntryType = "Unknown",
+            EntryType = EntryType.Unknown,
             BlobPath = "Entries/Unknown/photo.jpg",
             DataSchemaVersion = 0,
             Payload = new PendingEntryPayload
@@ -24,20 +24,15 @@ public class UnifiedAnalysisApplierTests
             }
         };
 
-        var unified = new UnifiedAnalysisResult
-        {
-            EntryType = "Meal"
-        };
-
         var repository = new RecordingRepository();
 
         await UnifiedAnalysisApplier.ApplyAsync(
             entry,
-            detectedEntryType: "Meal",
+            detectedEntryType: EntryType.Meal,
             repository,
             NullLogger.Instance);
 
-        Assert.Equal("Meal", entry.EntryType);
+        Assert.Equal(EntryType.Meal, entry.EntryType);
         Assert.Equal(1, entry.DataSchemaVersion);
         var mealPayload = Assert.IsType<MealPayload>(entry.Payload);
         Assert.Equal("shared meal", mealPayload.Description);
@@ -52,7 +47,7 @@ public class UnifiedAnalysisApplierTests
         var entry = new TrackedEntry
         {
             EntryId = 7,
-            EntryType = "Unknown",
+            EntryType = EntryType.Unknown,
             BlobPath = "Entries/Unknown/run.jpg",
             DataSchemaVersion = 0,
             Payload = new PendingEntryPayload
@@ -62,16 +57,11 @@ public class UnifiedAnalysisApplierTests
             }
         };
 
-        var unified = new UnifiedAnalysisResult
-        {
-            EntryType = "Exercise"
-        };
-
         var repository = new RecordingRepository();
 
         await UnifiedAnalysisApplier.ApplyAsync(
             entry,
-            detectedEntryType: "Exercise",
+            detectedEntryType: EntryType.Exercise,
             repository,
             NullLogger.Instance);
 
@@ -79,7 +69,7 @@ public class UnifiedAnalysisApplierTests
         Assert.Equal("run summary", exercisePayload.Description);
         Assert.Equal("Entries/Unknown/run_preview.jpg", exercisePayload.PreviewBlobPath);
         Assert.Equal("Entries/Unknown/run.jpg", exercisePayload.ScreenshotBlobPath);
-        Assert.Equal("Exercise", entry.EntryType);
+        Assert.Equal(EntryType.Exercise, entry.EntryType);
         Assert.Equal(1, entry.DataSchemaVersion);
         Assert.Equal(1, repository.UpdateCallCount);
     }
@@ -90,7 +80,7 @@ public class UnifiedAnalysisApplierTests
         var entry = new TrackedEntry
         {
             EntryId = 100,
-            EntryType = "Unknown",
+            EntryType = EntryType.Unknown,
             BlobPath = "Entries/Unknown/sleep.jpg",
             DataSchemaVersion = 0,
             Payload = new PendingEntryPayload
@@ -100,20 +90,15 @@ public class UnifiedAnalysisApplierTests
             }
         };
 
-        var unified = new UnifiedAnalysisResult
-        {
-            EntryType = "Sleep"
-        };
-
         var repository = new RecordingRepository();
 
         await UnifiedAnalysisApplier.ApplyAsync(
             entry,
-            detectedEntryType: "Sleep",
+            detectedEntryType: EntryType.Sleep,
             repository,
             NullLogger.Instance);
 
-        Assert.Equal("Sleep", entry.EntryType);
+        Assert.Equal(EntryType.Sleep, entry.EntryType);
         Assert.Equal(0, entry.DataSchemaVersion);
         var pendingPayload = Assert.IsType<PendingEntryPayload>(entry.Payload);
         Assert.Equal("sleep tracking", pendingPayload.Description);
@@ -126,7 +111,7 @@ public class UnifiedAnalysisApplierTests
         var entry = new TrackedEntry
         {
             EntryId = 55,
-            EntryType = "Meal",
+            EntryType = EntryType.Meal,
             BlobPath = "Entries/Meal/photo.jpg",
             DataSchemaVersion = 1,
             Payload = new MealPayload
@@ -136,21 +121,16 @@ public class UnifiedAnalysisApplierTests
             }
         };
 
-        var unified = new UnifiedAnalysisResult
-        {
-            EntryType = "Meal"
-        };
-
         var repository = new RecordingRepository();
 
         await UnifiedAnalysisApplier.ApplyAsync(
             entry,
-            detectedEntryType: "Meal",
+            detectedEntryType: EntryType.Meal,
             repository,
             NullLogger.Instance);
 
         Assert.Equal(0, repository.UpdateCallCount);
-        Assert.Equal("Meal", entry.EntryType);
+        Assert.Equal(EntryType.Meal, entry.EntryType);
         Assert.Equal(1, entry.DataSchemaVersion);
     }
 
@@ -170,9 +150,9 @@ public class UnifiedAnalysisApplierTests
         public Task AddAsync(TrackedEntry entry) => throw new NotImplementedException();
         public Task DeleteAsync(int entryId) => throw new NotImplementedException();
         public Task<IEnumerable<TrackedEntry>> GetByDayAsync(DateTime date, TimeZoneInfo? timeZone = null) => throw new NotImplementedException();
-        public Task<IEnumerable<TrackedEntry>> GetByEntryTypeAndDayAsync(string entryType, DateTime date, TimeZoneInfo? timeZone = null) => throw new NotImplementedException();
+        public Task<IEnumerable<TrackedEntry>> GetByEntryTypeAndDayAsync(EntryType entryType, DateTime date, TimeZoneInfo? timeZone = null) => throw new NotImplementedException();
         public Task<TrackedEntry?> GetByIdAsync(int entryId) => throw new NotImplementedException();
-        public Task UpdateEntryTypeAsync(int entryId, string entryType) => throw new NotImplementedException();
+        public Task UpdateEntryTypeAsync(int entryId, EntryType entryType) => throw new NotImplementedException();
         public Task UpdateProcessingStatusAsync(int entryId, ProcessingStatus status) => throw new NotImplementedException();
         #endregion
     }
