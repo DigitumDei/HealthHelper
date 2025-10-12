@@ -20,6 +20,7 @@
             Route="settings" />
     </FlyoutItem>
 
+    <!-- Hidden ShellContent registrations provide routable endpoints without appearing in the flyout. -->
     <ShellContent
         Route="week"
         ContentTemplate="{DataTemplate pages:WeekViewPage}"

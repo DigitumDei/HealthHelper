@@ -154,9 +154,15 @@ public class HorizontalSwipeBehavior : Behavior<View>
         }
     }
 
-    private static Task ResetViewAsync(View view)
+    private static async Task ResetViewAsync(View view)
     {
+        if (Math.Abs(view.TranslationX) < 1)
+        {
+            view.TranslationX = 0;
+            return;
+        }
+
+        await view.TranslateTo(0, 0, 120, Easing.SinOut).ConfigureAwait(false);
         view.TranslationX = 0;
-        return view.TranslateTo(0, 0, 120, Easing.SinOut);
     }
 }

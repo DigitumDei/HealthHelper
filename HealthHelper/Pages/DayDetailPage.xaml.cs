@@ -19,7 +19,14 @@ public partial class DayDetailPage : ContentPage
         get => targetDate;
         set
         {
-            targetDate = value;
+            var normalized = value.Kind switch
+            {
+                DateTimeKind.Utc => value.ToLocalTime(),
+                _ => value
+            };
+
+            // Normalize to date only to avoid time zone drift when navigating between contexts.
+            targetDate = normalized.Date;
             UpdateDisplayedDate();
         }
     }

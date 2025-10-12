@@ -12,6 +12,7 @@ public class HistoricalNavigationService : IHistoricalNavigationService
     private readonly HistoricalNavigationContext _navigationContext;
     private readonly ILogger<HistoricalNavigationService> _logger;
     private readonly SemaphoreSlim _navigationLock = new(1, 1);
+    private static readonly TimeSpan NavigationLockTimeout = TimeSpan.FromSeconds(5);
 
     public HistoricalNavigationService(
         HistoricalNavigationContext navigationContext,
@@ -95,7 +96,11 @@ public class HistoricalNavigationService : IHistoricalNavigationService
 
     public async Task NavigateBackAsync()
     {
-        await _navigationLock.WaitAsync().ConfigureAwait(false);
+        if (!await _navigationLock.WaitAsync(NavigationLockTimeout).ConfigureAwait(false))
+        {
+            _logger.LogWarning("Navigation lock timeout while navigating back.");
+            return;
+        }
         try
         {
             if (Shell.Current is null)
@@ -146,7 +151,11 @@ public class HistoricalNavigationService : IHistoricalNavigationService
         bool resetBreadcrumbs = false,
         bool useAbsoluteRoute = false)
     {
-        await _navigationLock.WaitAsync().ConfigureAwait(false);
+        if (!await _navigationLock.WaitAsync(NavigationLockTimeout).ConfigureAwait(false))
+        {
+            _logger.LogWarning("Navigation lock timeout while navigating to {Route}.", route);
+            return;
+        }
         try
         {
             if (Shell.Current is null)

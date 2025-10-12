@@ -55,6 +55,7 @@ public sealed class NavigationBreadcrumb
 
     private static string BuildDefaultLabel(HistoricalViewLevel level, DateTime date)
     {
+        // TODO: Localise breadcrumb labels once shared resources are available.
         return level switch
         {
             HistoricalViewLevel.Today => "Today",
