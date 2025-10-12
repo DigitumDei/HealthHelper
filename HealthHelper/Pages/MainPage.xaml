@@ -4,7 +4,9 @@
              xmlns:pageModels="clr-namespace:HealthHelper.PageModels"
              xmlns:models="clr-namespace:HealthHelper.Models"
              xmlns:templates="clr-namespace:HealthHelper.Pages.Templates"
+             xmlns:gestures="clr-namespace:HealthHelper.Utilities.Gestures"
              x:Class="HealthHelper.Pages.MainPage"
+             x:Name="MainPageRoot"
              x:DataType="pageModels:EntryLogViewModel"
              Title="Diet Tracker">
 
@@ -141,6 +143,9 @@
     </ContentPage.Resources>
 
     <ScrollView>
+        <ScrollView.Behaviors>
+            <gestures:HorizontalSwipeBehavior SwipeRightCommand="{Binding Source={x:Reference MainPageRoot}, Path=SwipeToWeekCommand}" />
+        </ScrollView.Behaviors>
         <VerticalStackLayout Spacing="24" Padding="24,32">
             <VerticalStackLayout Spacing="8">
                 <Label Text="Capture Your Health Entries" Style="{StaticResource Headline}" />

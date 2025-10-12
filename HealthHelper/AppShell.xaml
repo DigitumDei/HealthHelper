@@ -10,7 +10,7 @@
         <ShellContent
             Icon="{StaticResource IconCamera}"
             ContentTemplate="{DataTemplate pages:MainPage}"
-            Route="main" />
+            Route="today" />
     </FlyoutItem>
 
     <FlyoutItem Title="Settings">
@@ -19,5 +19,25 @@
             ContentTemplate="{DataTemplate pages:SettingsPage}"
             Route="settings" />
     </FlyoutItem>
+
+    <ShellContent
+        Route="week"
+        ContentTemplate="{DataTemplate pages:WeekViewPage}"
+        IsVisible="False" />
+
+    <ShellContent
+        Route="month"
+        ContentTemplate="{DataTemplate pages:MonthViewPage}"
+        IsVisible="False" />
+
+    <ShellContent
+        Route="year"
+        ContentTemplate="{DataTemplate pages:YearViewPage}"
+        IsVisible="False" />
+
+    <ShellContent
+        Route="day"
+        ContentTemplate="{DataTemplate pages:DayDetailPage}"
+        IsVisible="False" />
 
 </Shell>

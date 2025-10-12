@@ -5,8 +5,10 @@ using System.Threading.Tasks;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.PageModels;
+using CommunityToolkit.Mvvm.Input;
 using HealthHelper.Services.Analysis;
 using HealthHelper.Services.Media;
+using HealthHelper.Services.Navigation;
 using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
@@ -23,8 +25,11 @@ public partial class MainPage : ContentPage
     private readonly IPhotoResizer _photoResizer;
     private readonly ICameraCaptureService _cameraCaptureService;
     private readonly IPendingPhotoStore _pendingPhotoStore;
+    private readonly IHistoricalNavigationService _historicalNavigationService;
     private bool _isCapturing;
     private bool _isProcessingPending;
+
+    public IAsyncRelayCommand SwipeToWeekCommand { get; }
 
     public MainPage(
         EntryLogViewModel viewModel,
@@ -33,7 +38,8 @@ public partial class MainPage : ContentPage
         ILogger<MainPage> logger,
         IPhotoResizer photoResizer,
         ICameraCaptureService cameraCaptureService,
-        IPendingPhotoStore pendingPhotoStore)
+        IPendingPhotoStore pendingPhotoStore,
+        IHistoricalNavigationService historicalNavigationService)
     {
         InitializeComponent();
         BindingContext = viewModel;
@@ -43,6 +49,9 @@ public partial class MainPage : ContentPage
         _photoResizer = photoResizer;
         _cameraCaptureService = cameraCaptureService;
         _pendingPhotoStore = pendingPhotoStore;
+        _historicalNavigationService = historicalNavigationService;
+
+        SwipeToWeekCommand = new AsyncRelayCommand(NavigateToWeekViewAsync);
     }
 
     protected override async void OnAppearing()
@@ -446,5 +455,17 @@ public partial class MainPage : ContentPage
         }
 #endif
         return true;
+    }
+
+    private async Task NavigateToWeekViewAsync()
+    {
+        try
+        {
+            await _historicalNavigationService.NavigateToWeekAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to navigate to week view from swipe gesture.");
+        }
     }
 }
