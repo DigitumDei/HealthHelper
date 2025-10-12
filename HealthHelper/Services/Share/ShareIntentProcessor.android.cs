@@ -7,6 +7,7 @@ using HealthHelper.Utilities;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 using Microsoft.Extensions.Logging;
+using Java.Lang;
 
 namespace HealthHelper.Services.Share;
 
@@ -79,7 +80,7 @@ public sealed class ShareIntentProcessor : IShareIntentProcessor
 
             await _shareNavigationService.PresentShareDraftAsync(draft.DraftId, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (System.Exception ex)
         {
             _logger.LogError(ex, "Failed to import shared content.");
         }
@@ -91,9 +92,21 @@ public sealed class ShareIntentProcessor : IShareIntentProcessor
 
     private static Android.Net.Uri? GetShareUri(Intent intent)
     {
-        if (intent.GetParcelableExtra(Intent.ExtraStream) is Android.Net.Uri singleUri)
+        if (OperatingSystem.IsAndroidVersionAtLeast(33))
         {
-            return singleUri;
+            if (intent.GetParcelableExtra(Intent.ExtraStream, Class.FromType(typeof(Android.Net.Uri))) is Android.Net.Uri typedUri)
+            {
+                return typedUri;
+            }
+        }
+        else
+        {
+#pragma warning disable CS0618 // GetParcelableExtra(string) is obsolete but required for older API levels
+            if (intent.GetParcelableExtra(Intent.ExtraStream) is Android.Net.Uri legacyUri)
+            {
+                return legacyUri;
+            }
+#pragma warning restore CS0618
         }
 
         if (intent.ClipData?.ItemCount > 0)
@@ -106,7 +119,7 @@ public sealed class ShareIntentProcessor : IShareIntentProcessor
 
     private static string? TryResolveDisplayName(ContentResolver resolver, Android.Net.Uri uri)
     {
-        const string column = OpenableColumns.DisplayName;
+        var column = DocumentsContract.Document.ColumnDisplayName;
         using var cursor = resolver.Query(uri, new[] { column }, null, null, null);
         if (cursor is null)
         {
@@ -121,7 +134,13 @@ public sealed class ShareIntentProcessor : IShareIntentProcessor
         var index = cursor.GetColumnIndex(column);
         if (index < 0)
         {
-            return null;
+#pragma warning disable CS0618 // OpenableColumns is obsolete on newer API levels
+            index = cursor.GetColumnIndex(OpenableColumns.DisplayName);
+#pragma warning restore CS0618
+            if (index < 0)
+            {
+                return null;
+            }
         }
 
         return cursor.GetString(index);

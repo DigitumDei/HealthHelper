@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.IO;
 using HealthHelper.Data;
 using HealthHelper.Models;
@@ -76,11 +75,8 @@ public sealed class SharedImageImportService : ISharedImageImportService
             throw new InvalidOperationException($"Draft {draftId} was not found or has already been processed.");
         }
 
-        var assumedEntryType = NormalizeEntryType(request.EntryType)
-            ?? (draft.Metadata.IsLikelyScreenshot ? "Exercise" : "Meal");
-
         var entryGuid = Guid.NewGuid();
-        var relativeDirectory = Path.Combine("Entries", assumedEntryType);
+        var relativeDirectory = Path.Combine("Entries", "Unknown");
         var directory = Path.Combine(FileSystem.AppDataDirectory, relativeDirectory);
         Directory.CreateDirectory(directory);
 
@@ -115,9 +111,9 @@ public sealed class SharedImageImportService : ISharedImageImportService
             CapturedAtTimeZoneId = timeZoneId,
             CapturedAtOffsetMinutes = offsetMinutes,
             BlobPath = originalRelativePath,
-            DataSchemaVersion = 1,
+            DataSchemaVersion = 0,
             ProcessingStatus = ProcessingStatus.Pending,
-            Payload = BuildPayload(assumedEntryType, request, originalRelativePath, previewRelativePath)
+            Payload = BuildPendingPayload(request, previewRelativePath)
         };
 
         try
@@ -127,7 +123,7 @@ public sealed class SharedImageImportService : ISharedImageImportService
 
             await repository.AddAsync(newEntry).ConfigureAwait(false);
             await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId, cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("Committed shared image {DraftId} as entry {EntryId} (assumed {AssumedType}, awaiting classification).", draftId, newEntry.EntryId, assumedEntryType);
+            _logger.LogInformation("Committed shared image {DraftId} as entry {EntryId} awaiting classification.", draftId, newEntry.EntryId);
         }
         finally
         {
@@ -164,36 +160,6 @@ public sealed class SharedImageImportService : ISharedImageImportService
             "image/gif" => ".gif",
             _ => ".jpg"
         };
-    }
-
-    private static string? NormalizeEntryType(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        if (string.Equals(value, "Meal", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Meal";
-        }
-
-        if (string.Equals(value, "Exercise", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Exercise";
-        }
-
-        if (string.Equals(value, "Sleep", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Sleep";
-        }
-
-        if (string.Equals(value, "Other", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Other";
-        }
-
-        return null;
     }
 
     private static DateTime EnsureUtc(DateTime value)
@@ -233,22 +199,12 @@ public sealed class SharedImageImportService : ISharedImageImportService
         return (tzId, offsetMinutesFromNow);
     }
 
-    private static IEntryPayload BuildPayload(string entryType, ShareEntryCommitRequest request, string blobPath, string previewPath)
+    private static PendingEntryPayload BuildPendingPayload(ShareEntryCommitRequest request, string previewPath)
     {
-        if (entryType == "Exercise")
-        {
-            return new ExercisePayload
-            {
-                Description = request.Description,
-                PreviewBlobPath = previewPath,
-                ScreenshotBlobPath = blobPath
-            };
-        }
-
-        return new MealPayload
+        return new PendingEntryPayload
         {
             Description = string.IsNullOrWhiteSpace(request.Description)
-                ? "Shared meal photo"
+                ? "Shared photo"
                 : request.Description,
             PreviewBlobPath = previewPath
         };

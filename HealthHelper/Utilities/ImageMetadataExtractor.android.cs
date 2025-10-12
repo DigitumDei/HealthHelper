@@ -1,6 +1,7 @@
 ﻿#if ANDROID
 using System.Globalization;
 using AndroidX.ExifInterface.Media;
+using Android.Util;
 
 namespace HealthHelper.Utilities;
 
@@ -70,9 +71,9 @@ public static partial class ImageMetadataExtractor
             metadata.CapturedAtUtc = DateTime.SpecifyKind(capturedUtc, DateTimeKind.Utc);
             metadata.HasExifTimestamp = true;
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore metadata failures; fall back to file creation timestamps.
+            Log.Warn("HealthHelper.Metadata", $"Failed to read EXIF metadata from {absolutePath}: {ex}");
         }
     }
 }

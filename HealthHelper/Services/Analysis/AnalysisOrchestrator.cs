@@ -139,8 +139,8 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
 
             if (unifiedResult is not null)
             {
-                await UpdateEntryTypeIfNeededAsync(entry, unifiedResult).ConfigureAwait(false);
-                ValidateMealAnalysis(entry.EntryId, unifiedResult);
+                await UpdateEntryClassificationAsync(entry, unifiedResult).ConfigureAwait(false);
+                ValidateUnifiedAnalysis(entry.EntryId, unifiedResult);
             }
 
             if (existingAnalysis is null)
@@ -174,31 +174,100 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         }
     }
 
-    private async Task UpdateEntryTypeIfNeededAsync(TrackedEntry entry, UnifiedAnalysisResult unified)
+    private async Task UpdateEntryClassificationAsync(TrackedEntry entry, UnifiedAnalysisResult unified)
     {
         var detectedType = NormalizeEntryType(unified.EntryType);
         if (string.IsNullOrWhiteSpace(detectedType))
         {
+            _logger.LogWarning("Unified analysis returned an unknown entry type for entry {EntryId}.", entry.EntryId);
             return;
         }
 
-        if (string.Equals(entry.EntryType, detectedType, StringComparison.OrdinalIgnoreCase))
+        var originalType = entry.EntryType;
+        var pendingPayload = entry.Payload as PendingEntryPayload;
+        var payloadConverted = false;
+
+        if (pendingPayload is not null)
+        {
+            var converted = ConvertPendingPayload(entry, pendingPayload, detectedType);
+            if (!ReferenceEquals(converted, pendingPayload))
+            {
+                entry.Payload = converted;
+                entry.DataSchemaVersion = 1;
+                payloadConverted = true;
+            }
+            else
+            {
+                entry.Payload = converted;
+                entry.DataSchemaVersion = 0;
+            }
+        }
+
+        var typeChanged = !string.Equals(originalType, detectedType, StringComparison.OrdinalIgnoreCase);
+        if (!typeChanged && !payloadConverted)
         {
             return;
         }
 
-        _logger.LogInformation("Detected entry type {DetectedType} for entry {EntryId} (was {ExistingType}).", detectedType, entry.EntryId, entry.EntryType);
         entry.EntryType = detectedType;
-        await _trackedEntryRepository.UpdateEntryTypeAsync(entry.EntryId, detectedType).ConfigureAwait(false);
+
+        await _trackedEntryRepository.UpdateAsync(entry).ConfigureAwait(false);
+        _logger.LogInformation(
+            "Updated entry {EntryId} classification to {EntryType} (payload={PayloadType}, schemaVersion={SchemaVersion}).",
+            entry.EntryId,
+            entry.EntryType,
+            entry.Payload.GetType().Name,
+            entry.DataSchemaVersion);
+    }
+
+    private IEntryPayload ConvertPendingPayload(TrackedEntry entry, PendingEntryPayload pendingPayload, string detectedType)
+    {
+        switch (detectedType)
+        {
+            case "Meal":
+                return new MealPayload
+                {
+                    Description = pendingPayload.Description,
+                    PreviewBlobPath = pendingPayload.PreviewBlobPath ?? entry.BlobPath
+                };
+            case "Exercise":
+                return new ExercisePayload
+                {
+                    Description = pendingPayload.Description,
+                    PreviewBlobPath = pendingPayload.PreviewBlobPath ?? entry.BlobPath,
+                    ScreenshotBlobPath = entry.BlobPath ?? pendingPayload.PreviewBlobPath
+                };
+            default:
+                // Sleep/Other remain with pending payload until dedicated payloads exist.
+                return pendingPayload;
+        }
+    }
+
+    private void ValidateUnifiedAnalysis(int entryId, UnifiedAnalysisResult unified)
+    {
+        var detectedType = NormalizeEntryType(unified.EntryType);
+        switch (detectedType)
+        {
+            case "Meal":
+                ValidateMealAnalysis(entryId, unified);
+                break;
+            case "Exercise":
+                ValidateExerciseAnalysis(entryId, unified);
+                break;
+            case "Sleep":
+                ValidateSleepAnalysis(entryId, unified);
+                break;
+            case "Other":
+                ValidateOtherAnalysis(entryId, unified);
+                break;
+            default:
+                _logger.LogWarning("Validation skipped for entry {EntryId}; unrecognized entry type {EntryType}.", entryId, unified.EntryType);
+                break;
+        }
     }
 
     private void ValidateMealAnalysis(int entryId, UnifiedAnalysisResult unified)
     {
-        if (!string.Equals(unified.EntryType, "Meal", StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
         if (unified.MealAnalysis is null)
         {
             _logger.LogWarning("Meal entry {EntryId} did not include mealAnalysis payload.", entryId);
@@ -221,6 +290,36 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to validate meal analysis for entry {EntryId}.", entryId);
+        }
+    }
+
+    private void ValidateExerciseAnalysis(int entryId, UnifiedAnalysisResult unified)
+    {
+        if (unified.ExerciseAnalysis is null)
+        {
+            _logger.LogWarning("Exercise entry {EntryId} did not include exerciseAnalysis payload.", entryId);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(unified.ExerciseAnalysis.SchemaVersion))
+        {
+            _logger.LogWarning("Exercise analysis for entry {EntryId} omitted schemaVersion.", entryId);
+        }
+    }
+
+    private void ValidateSleepAnalysis(int entryId, UnifiedAnalysisResult unified)
+    {
+        if (unified.SleepAnalysis is null)
+        {
+            _logger.LogWarning("Sleep entry {EntryId} did not include sleepAnalysis payload.", entryId);
+        }
+    }
+
+    private void ValidateOtherAnalysis(int entryId, UnifiedAnalysisResult unified)
+    {
+        if (unified.OtherAnalysis is null)
+        {
+            _logger.LogWarning("Other entry {EntryId} did not include otherAnalysis payload.", entryId);
         }
     }
 

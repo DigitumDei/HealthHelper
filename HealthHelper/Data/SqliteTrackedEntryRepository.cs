@@ -124,12 +124,18 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
 
     private void DeserializePayload(TrackedEntry entry)
     {
+        if (entry.DataSchemaVersion == 0)
+        {
+            entry.Payload = JsonSerializer.Deserialize<PendingEntryPayload>(entry.DataPayload) ?? new PendingEntryPayload();
+            return;
+        }
+
         entry.Payload = entry.EntryType switch
         {
             "Meal" => JsonSerializer.Deserialize<MealPayload>(entry.DataPayload) ?? new MealPayload(),
             "Exercise" => JsonSerializer.Deserialize<ExercisePayload>(entry.DataPayload) ?? new ExercisePayload(),
             "DailySummary" => NormalizeDailySummaryPayload(JsonSerializer.Deserialize<DailySummaryPayload>(entry.DataPayload)),
-            _ => entry.Payload
+            _ => JsonSerializer.Deserialize<PendingEntryPayload>(entry.DataPayload) ?? new PendingEntryPayload()
         };
     }
 

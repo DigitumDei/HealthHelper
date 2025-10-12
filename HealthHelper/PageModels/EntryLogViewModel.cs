@@ -449,6 +449,43 @@ public partial class EntryLogViewModel : ObservableObject
             return;
         }
 
+        if (entry.Payload is PendingEntryPayload pendingPayload)
+        {
+            if (string.IsNullOrWhiteSpace(entry.BlobPath))
+            {
+                _logger.LogWarning("AddPendingEntryAsync: Missing original blob path for pending entry {EntryId}.", entry.EntryId);
+                return;
+            }
+
+            var displayRelativePath = pendingPayload.PreviewBlobPath ?? entry.BlobPath;
+            if (string.IsNullOrWhiteSpace(displayRelativePath))
+            {
+                _logger.LogWarning("AddPendingEntryAsync: Missing display blob path for pending entry {EntryId}.", entry.EntryId);
+                return;
+            }
+
+            var fullPath = Path.Combine(FileSystem.AppDataDirectory, displayRelativePath);
+            var originalFullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
+            var placeholder = new MealPhoto(
+                entry.EntryId,
+                fullPath,
+                originalFullPath,
+                pendingPayload.Description ?? string.Empty,
+                entry.CapturedAt,
+                entry.CapturedAtTimeZoneId,
+                entry.CapturedAtOffsetMinutes,
+                entry.ProcessingStatus);
+
+            await MainThread.InvokeOnMainThreadAsync(() => Meals.Insert(0, placeholder));
+
+            await WithSummaryCardLockAsync(async () =>
+            {
+                await MainThread.InvokeOnMainThreadAsync(() => UpdateSummaryOutdatedFlag(Meals.Count));
+            });
+
+            return;
+        }
+
         if (entry.Payload is MealPayload mealPayload)
         {
             if (string.IsNullOrWhiteSpace(entry.BlobPath))

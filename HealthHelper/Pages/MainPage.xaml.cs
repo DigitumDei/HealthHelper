@@ -211,9 +211,9 @@ public partial class MainPage : ContentPage
 
     private PendingPhotoCapture CreatePendingCaptureMetadata()
     {
-        string relativeDirectory = Path.Combine("Entries", "Meal");
-        string mealPhotosDir = Path.Combine(FileSystem.AppDataDirectory, relativeDirectory);
-        Directory.CreateDirectory(mealPhotosDir);
+        string relativeDirectory = Path.Combine("Entries", "Unknown");
+        string pendingDir = Path.Combine(FileSystem.AppDataDirectory, relativeDirectory);
+        Directory.CreateDirectory(pendingDir);
 
         string originalFileName = $"{Guid.NewGuid()}.jpg";
         string previewFileName = $"{Path.GetFileNameWithoutExtension(originalFileName)}_preview.jpg";
@@ -271,12 +271,12 @@ public partial class MainPage : ContentPage
             CapturedAtTimeZoneId = timeZoneId,
             CapturedAtOffsetMinutes = offsetMinutes,
             BlobPath = capture.OriginalRelativePath,
-            Payload = new MealPayload
+            Payload = new PendingEntryPayload
             {
-                Description = "New meal photo",
+                Description = "Processing photo",
                 PreviewBlobPath = capture.PreviewRelativePath
             },
-            DataSchemaVersion = 1,
+            DataSchemaVersion = 0,
             ProcessingStatus = ProcessingStatus.Pending
         };
 

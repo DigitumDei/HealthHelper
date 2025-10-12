@@ -18,7 +18,7 @@ public class TrackedEntry
     public ProcessingStatus ProcessingStatus { get; set; } = ProcessingStatus.Pending;
 
     [NotMapped]
-    public IEntryPayload Payload { get; set; } = new MealPayload();
+    public IEntryPayload Payload { get; set; } = new PendingEntryPayload();
 
     [NotMapped]
     public DateTime CapturedAtLocal => DateTimeConverter.ToOriginalLocal(

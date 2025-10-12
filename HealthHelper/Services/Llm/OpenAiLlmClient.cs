@@ -373,6 +373,7 @@ Important rules:
     private static string GetUnifiedAnalysisSchema()
     {
         return """
+        Example meal entry:
         {
           "schemaVersion": "1.0",
           "entryType": "Meal",
@@ -422,6 +423,96 @@ Important rules:
           "exerciseAnalysis": null,
           "sleepAnalysis": null,
           "otherAnalysis": null,
+          "warnings": []
+        }
+
+        Example exercise entry:
+        {
+          "schemaVersion": "1.0",
+          "entryType": "Exercise",
+          "confidence": 0.9,
+          "mealAnalysis": null,
+          "exerciseAnalysis": {
+            "schemaVersion": "1.0",
+            "activityType": "Outdoor run",
+            "metrics": {
+              "distance": 5.2,
+              "distanceUnit": "kilometers",
+              "durationMinutes": 31.4,
+              "averagePace": "06:02 /km",
+              "averageSpeed": 9.9,
+              "speedUnit": "km/h",
+              "calories": 410,
+              "averageHeartRate": 152,
+              "maxHeartRate": 172,
+              "steps": 6800,
+              "elevationGain": 120,
+              "elevationUnit": "meters"
+            },
+            "insights": {
+              "summary": "Negative split run with steady pacing.",
+              "positives": [
+                "Strong heart rate control",
+                "Consistent pacing across splits"
+              ],
+              "improvements": [
+                "Extend cooldown with light stretching"
+              ],
+              "recommendations": [
+                "Include interval training later this week"
+              ]
+            },
+            "warnings": []
+          },
+          "sleepAnalysis": null,
+          "otherAnalysis": null,
+          "warnings": []
+        }
+
+        Example sleep entry:
+        {
+          "schemaVersion": "1.0",
+          "entryType": "Sleep",
+          "confidence": 0.82,
+          "mealAnalysis": null,
+          "exerciseAnalysis": null,
+          "sleepAnalysis": {
+            "durationHours": 7.2,
+            "sleepScore": 86,
+            "qualitySummary": "Restorative sleep with brief wake periods.",
+            "environmentNotes": [
+              "Dark room",
+              "Ambient temperature 20C"
+            ],
+            "recommendations": [
+              "Maintain consistent bedtime routine",
+              "Consider earlier screen cutoff to improve latency"
+            ]
+          },
+          "otherAnalysis": null,
+          "warnings": []
+        }
+
+        Example other entry:
+        {
+          "schemaVersion": "1.0",
+          "entryType": "Other",
+          "confidence": 0.76,
+          "mealAnalysis": null,
+          "exerciseAnalysis": null,
+          "sleepAnalysis": null,
+          "otherAnalysis": {
+            "summary": "Health-related document screenshot (lab results).",
+            "tags": [
+              "Medical",
+              "Bloodwork",
+              "Follow-up"
+            ],
+            "recommendations": [
+              "Schedule follow-up with physician",
+              "Log key biomarker changes in notes"
+            ]
+          },
           "warnings": []
         }
         """;
