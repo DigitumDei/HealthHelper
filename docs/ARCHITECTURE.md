@@ -9,10 +9,12 @@ erDiagram
     TrackedEntry {
         integer EntryId "PRIMARY KEY"
         string ExternalId "optional GUID"
-        string EntryType
+        string EntryType "Unknown, Meal, Exercise, Sleep, Other, DailySummary"
         datetime CapturedAt
         string BlobPath
-        string DataPayload
+        string DataPayload "JSON payload"
+        integer DataSchemaVersion "0=Pending, 1+=Typed"
+        string ProcessingStatus
     }
     EntryAnalysis {
         integer AnalysisId "PRIMARY KEY"
@@ -42,12 +44,10 @@ classDiagram
     class MainPage {
         +TakePhotoButton_Clicked()
     }
-    class MealLogViewModel {
-        +ObservableCollection<TrackedEntry> Entries
+    class EntryLogViewModel {
+        +ObservableCollection<MealPhoto> Meals
+        +ObservableCollection<ExerciseEntry> Exercises
         +AddEntry()
-    }
-    class EntryLoggingService {
-        +LogCaptureAsync()
     }
     class ITrackedEntryRepository {
         <<interface>>
@@ -79,40 +79,51 @@ classDiagram
         +GetLatestAsync()
     }
 
-    MainPage --> MealLogViewModel : binds
-    MainPage --> EntryLoggingService : capture commands
-    MealLogViewModel ..> ITrackedEntryRepository : loads entries
-    EntryLoggingService --> ITrackedEntryRepository : persists entry
-    EntryLoggingService --> ILlmProcessingQueue : enqueue analysis
-    ILlmProcessingQueue --> AnalysisOrchestrator : dispatches work
+    MainPage --> EntryLogViewModel : binds
+    MainPage --> ITrackedEntryRepository : persists entry
+    MainPage --> IBackgroundAnalysisService : enqueue analysis
+    EntryLogViewModel ..> ITrackedEntryRepository : loads entries
+    IBackgroundAnalysisService --> AnalysisOrchestrator : dispatches work
     AnalysisOrchestrator --> ILLmClient : calls provider
+    AnalysisOrchestrator --> ITrackedEntryRepository : updates entry type
     AnalysisOrchestrator --> IEntryAnalysisRepository : stores analysis
     SummaryService --> IEntryAnalysisRepository : reads analyses
     SummaryService --> IDailySummaryRepository : writes summary
-    MealLogViewModel ..> SummaryService : refresh summaries
+    EntryLogViewModel ..> SummaryService : refresh summaries
 ```
 
 ## Purpose & Scope
 HealthHelper is a cross-platform .NET MAUI app that captures wellbeing signals (meals today, exercise and sleep tomorrow), enriches them with user-selected LLM insights, and surfaces daily summaries. This doc outlines system layers, data flow, and extensibility points so enhancements preserve the capture → analysis → summary pipeline.
 
 ## Layered Application Structure
-- **UI Layer**: `Pages/` houses XAML views and `PageModels/` supplies presentation logic (e.g., `MainPage` + `MealLogViewModel`). Each page binds to observable collections of tracked entries so the UI reacts instantly to repository updates.
-- **Domain Models**: `Models/` defines immutable records. We evolve toward a shared `TrackedEntry` root (`long Id`, `string? ExternalId`, `EntryType`, `CapturedAt`, `IEntryPayload Payload`) with type-specific payloads (`MealPayload`, `ExercisePayload`, `SleepPayload`) implementing `IEntryPayload`. Persist payloads as JSON via repository serializers so the schema remains versioned and strongly typed. Analysis entities (`EntryAnalysis`, `DailySummary`) live here as well.
+- **UI Layer**: `Pages/` houses XAML views and `PageModels/` supplies presentation logic (e.g., `MainPage` + `EntryLogViewModel`). Each page binds to observable collections of type-specific entry cards (`MealPhoto`, `ExerciseEntry`) so the UI reacts instantly to repository updates and classification changes.
+- **Domain Models**: `Models/` defines records with a shared `TrackedEntry` root (`int EntryId`, `Guid? ExternalId`, `EntryType` enum, `CapturedAt`, `IEntryPayload Payload`, `DataSchemaVersion`). Entry types start as `EntryType.Unknown` with `PendingEntryPayload`, then the LLM classifies them and payloads migrate to type-specific implementations (`MealPayload`, `ExercisePayload`, `SleepPayload`). The `EntryType` enum provides compile-time type safety. Persist payloads as JSON via repository serializers with schema versioning (0=Pending, 1+=Typed). Analysis entities (`EntryAnalysis`, `DailySummary`, `UnifiedAnalysisResult`) live here as well.
 - **Services & Utilities**: Capture orchestration, storage adapters, and LLM provider clients belong under `Utilities/` or a dedicated `Services/` folder and are registered centrally in `MauiProgram.cs` for dependency injection.
 - **Platform Bridges**: `Platforms/` contains manifests and platform glue. Android currently uses `FileProvider` for captured photos; future heads may surface fitness sensors or sleep APIs.
 
 ## Entry Ingestion & Persistence Flow
-1. **Capture / Import** – UI components invoke media pickers, sensor APIs, or manual forms to create `TrackedEntry` instances (current implementation handles photos via `MediaPicker`).
-2. **Normalize** – Copy raw assets into app-owned folders (`FileSystem.AppDataDirectory/Entries/<EntryType>/`) and generate canonical metadata (timestamps, tags, origin) before persistence.
-3. **Catalog** – Save entries through `ITrackedEntryRepository`, serialising the strongly typed `IEntryPayload` into JSON (including schema versioning) before persisting to SQLite. Columns include an auto-increment `EntryId`, optional `ExternalId` (GUID for sync), `EntryType`, `CapturedAt`, `PayloadJson`, `DataSchemaVersion`, `BlobPath`, and optional annotations. Repositories handle deserialisation back to the correct payload type when queried.
-4. **Cleanup** – When entries are removed, repositories delete associated blobs. Add retention policies or archival hooks as the dataset grows.
+1. **Capture / Import** – UI components invoke camera capture, share intents, or media pickers to create `TrackedEntry` instances with `EntryType.Unknown` and `PendingEntryPayload`.
+2. **Normalize** – Copy raw assets into app-owned folders (`FileSystem.AppDataDirectory/Entries/Unknown/`) and generate canonical metadata (timestamps, timezone info, EXIF data when available) before persistence.
+3. **Catalog** – Save entries through `ITrackedEntryRepository`, serialising `PendingEntryPayload` as JSON with `DataSchemaVersion=0`. Columns include auto-increment `EntryId`, optional `ExternalId` (GUID for sync), `EntryType` enum, `CapturedAt`, timezone metadata, `DataPayload`, `DataSchemaVersion`, `BlobPath`, and `ProcessingStatus`.
+4. **Classification** – After LLM analysis returns, `UnifiedAnalysisApplier` updates `EntryType` enum and converts `PendingEntryPayload` to the appropriate type-specific payload (`MealPayload`, `ExercisePayload`, etc.) with `DataSchemaVersion=1`. Repository handles deserialization based on schema version.
+5. **Cleanup** – When entries are removed, repositories delete associated blobs. Add retention policies or archival hooks as the dataset grows.
 
-## LLM Processing Pipeline
-- **Trigger**: Persisted entries enqueue work items via `ILlmProcessingQueue`, encapsulating entry IDs and target models to centralise retries, batching, and cancellation.
-- **Provider Abstraction**: `ILLmClient` exposes `InvokeAnalysisAsync(TrackedEntry entry, LlmRequestContext context)` and returns an `LlmAnalysisResult` containing the persisted `EntryAnalysis` plus provider diagnostics (token usage, rate data). Provider adapters (OpenAI, Azure OpenAI, LiteLLM proxy, self-hosted endpoints) implement it, backed by user-selected settings stored in `SecureStorage` or encrypted preferences.
-- **Prompt Construction**: Build prompts from entry metadata and down-sampled assets. Include entry type context so generic models interpret inputs correctly.
-- **Invocation & Resilience**: Execute network calls via the chosen adapter, handling rate limits and translating provider-specific faults into domain errors. Processing happens off-device per the user’s trusted endpoint.
-- **Storage**: Persist results as `EntryAnalysis` records keyed by an auto-incrementing integer `Id`. Each record stores `EntryId` (foreign key to `TrackedEntry`), `EntryType`, `ProviderId`, `Model`, `CapturedAt`, `InsightsJson`, `Confidence`, and optional `ExternalId` / `RawResponseHash` values for cross-device or integrity needs. Guard raw payload logging behind compile-time flags.
+## LLM Processing Pipeline (Unified Analysis)
+- **Trigger**: Persisted entries enqueue work items via `IBackgroundAnalysisService`, encapsulating entry IDs and target models to centralise retries, batching, and cancellation.
+- **Provider Abstraction**: `ILLmClient` exposes `InvokeAnalysisAsync(TrackedEntry entry, LlmRequestContext context)` and returns an `LlmAnalysisResult` containing `UnifiedAnalysisResult` plus provider diagnostics (token usage, rate data). Provider adapters (OpenAI, Azure OpenAI, LiteLLM proxy, self-hosted endpoints) implement it, backed by user-selected settings stored in `SecureStorage`.
+- **Unified Prompt Construction**: Build a single prompt that asks the LLM to:
+  1. **Classify** the entry type (Meal, Exercise, Sleep, Other) based on image content
+  2. **Analyze** the entry using the appropriate type-specific schema
+  3. Return `UnifiedAnalysisResult` containing `entryType`, `confidence`, and one populated analysis object (`mealAnalysis`, `exerciseAnalysis`, `sleepAnalysis`, or `otherAnalysis`)
+- **Schema Documentation**: The prompt includes complete example responses for all four entry types showing expected JSON structure.
+- **Invocation & Resilience**: Execute network calls via the chosen adapter, handling rate limits and translating provider-specific faults into domain errors. Processing happens off-device per the user's trusted endpoint.
+- **Classification & Storage**:
+  1. Parse `UnifiedAnalysisResult` from LLM response
+  2. Extract detected `entryType` string and convert to `EntryType` enum via `EntryTypeHelper.FromString()`
+  3. `UnifiedAnalysisApplier` converts `PendingEntryPayload` to type-specific payload (`MealPayload`, `ExercisePayload`, etc.)
+  4. Update entry via `ITrackedEntryRepository` with new enum type and payload
+  5. Persist full analysis as `EntryAnalysis` record with `InsightsJson` containing the complete unified result
+- **Validation**: Type-specific validators verify the appropriate analysis section is present and well-formed (e.g., `ValidateMealAnalysis`, `ValidateExerciseAnalysis`).
 
 ## Daily Summaries
 - **Aggregation**: Group analyses by local calendar day, spanning all entry types. A summarisation service assembles prompts referencing the day’s `EntryAnalysis` records.
@@ -130,11 +141,18 @@ HealthHelper is a cross-platform .NET MAUI app that captures wellbeing signals (
 - Coordinating services (e.g., `EntryLoggingService`, `AnalysisOrchestrator`, `SummaryService`) encapsulate workflows so UI code remains thin.
 
 ## Extensibility & Future Work
-- **Additional Entry Types**: Standardise payload schemas so new categories (biometrics, mood) integrate by defining value objects and UI flows while reusing repositories.
-- **Imports & Integrations**: Support gallery imports, HealthKit/Google Fit bridges, or CSV ingestion that route through the same normalisation pipeline.
+- **Additional Entry Types**: Add new categories (biometrics, mood, medications) by:
+  1. Adding new enum value to `EntryType` enum
+  2. Defining new payload types implementing `IEntryPayload`
+  3. Adding analysis result models (e.g., `BiometricAnalysisResult`)
+  4. Extending `UnifiedAnalysisResult` with new analysis property
+  5. Adding example to LLM schema prompt
+  6. Implementing payload converter in `UnifiedAnalysisApplier`
+  7. Creating type-specific validator
+- **Imports & Integrations**: Support gallery imports, HealthKit/Google Fit bridges, share intents (implemented), or CSV ingestion that route through the same `Unknown` → LLM classification pipeline.
 - **Provider Catalog**: Maintain a configurable provider registry (JSON or embedded configuration) enumerating endpoints, default models, and supported capabilities.
 - **Sync & Backup**: Reserve `HealthHelper.Sync` for optional cloud backups; ensure serialised data redacts sensitive information.
-- **Testing**: Build `HealthHelper.Tests/` with mocks for repositories, media adapters, and `ILLmClient` to validate orchestration and relational integrity without external calls.
+- **Testing**: Build `HealthHelper.Tests/` with mocks for repositories, media adapters, and `ILLmClient` to validate orchestration, classification logic, and relational integrity without external calls. Unit tests verify payload transitions and enum conversions.
 
 ## Operational Considerations
 - Keep `ApplicationId` in `HealthHelper.csproj` aligned with manifest package identifiers to avoid deployment failures.
