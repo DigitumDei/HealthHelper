@@ -277,7 +277,26 @@ public partial class EntryLogViewModel : ObservableObject
         try
         {
             _logger.LogDebug("Loading tracked entries for {Date}.", DateTime.Now.Date);
-            var entries = await _trackedEntryRepository.GetByDayAsync(DateTime.Now).ConfigureAwait(false);
+            var entries = (await _trackedEntryRepository.GetByDayAsync(DateTime.Now).ConfigureAwait(false))
+                .ToList();
+
+            var stuckEntries = entries
+                .Where(entry => entry.ProcessingStatus == ProcessingStatus.Processing)
+                .ToList();
+
+            foreach (var stuck in stuckEntries)
+            {
+                try
+                {
+                    stuck.ProcessingStatus = ProcessingStatus.Failed;
+                    await _trackedEntryRepository.UpdateProcessingStatusAsync(stuck.EntryId, ProcessingStatus.Failed).ConfigureAwait(false);
+                }
+                catch (Exception updateEx)
+                {
+                    _logger.LogWarning(updateEx, "Failed to downgrade processing entry {EntryId} to Failed state after reload.", stuck.EntryId);
+                    stuck.ProcessingStatus = ProcessingStatus.Failed;
+                }
+            }
 
             var summaryEntries = await _trackedEntryRepository
                 .GetByEntryTypeAndDayAsync(EntryType.DailySummary, DateTime.Now)
