@@ -84,6 +84,17 @@ public partial class EntryLogViewModel : ObservableObject
                 return;
             }
 
+            if (entry is SleepEntry sleepEntry)
+            {
+                _logger.LogInformation("Navigating to sleep detail for entry {EntryId}.", sleepEntry.EntryId);
+                await Shell.Current.GoToAsync(nameof(SleepDetailPage),
+                    new Dictionary<string, object>
+                    {
+                        { "Sleep", sleepEntry }
+                    });
+                return;
+            }
+
             _logger.LogWarning("No detail page registered for entry type {EntryType}.", entry.EntryType);
             await Shell.Current.DisplayAlertAsync("Unsupported entry", "This entry type cannot be opened yet.", "OK");
         }
@@ -340,6 +351,10 @@ public partial class EntryLogViewModel : ObservableObject
                 .Where(entry => entry.EntryType == EntryType.Meal)
                 .ToList();
 
+            var sleepEntries = entries
+                .Where(entry => entry.EntryType == EntryType.Sleep)
+                .ToList();
+
             var pendingEntries = entries
                 .Where(entry => entry.EntryType == EntryType.Unknown && entry.Payload is PendingEntryPayload)
                 .ToList();
@@ -440,10 +455,15 @@ public partial class EntryLogViewModel : ObservableObject
                 })
                 .OfType<ExerciseEntry>();
 
+            var sleepCards = sleepEntries
+                .Select(CreateCardFromEntry)
+                .OfType<SleepEntry>();
+
             var combinedCards = pendingCards
                 .Cast<TrackedEntryCard>()
                 .Concat(mealCards)
                 .Concat(exerciseCards)
+                .Concat(sleepCards)
                 .OrderByDescending(card => card.CapturedAtUtc)
                 .ToList();
 
@@ -521,6 +541,39 @@ public partial class EntryLogViewModel : ObservableObject
                 screenshotFullPath,
                 exercisePayload.Description,
                 exercisePayload.ExerciseType,
+                entry.CapturedAt,
+                entry.CapturedAtTimeZoneId,
+                entry.CapturedAtOffsetMinutes,
+                entry.ProcessingStatus);
+        }
+
+        if (entry.EntryType == EntryType.Sleep)
+        {
+            string? previewRelativePath = null;
+            string? description = null;
+
+            switch (entry.Payload)
+            {
+                case PendingEntryPayload pendingSleepPayload:
+                    previewRelativePath = pendingSleepPayload.PreviewBlobPath ?? entry.BlobPath;
+                    description = pendingSleepPayload.Description;
+                    break;
+            }
+
+            previewRelativePath ??= entry.BlobPath;
+
+            if (string.IsNullOrWhiteSpace(previewRelativePath))
+            {
+                _logger.LogWarning("CreateCardFromEntry: Missing preview path for sleep entry {EntryId}.", entry.EntryId);
+                return null;
+            }
+
+            var previewFullPath = Path.Combine(FileSystem.AppDataDirectory, previewRelativePath);
+
+            return new SleepEntry(
+                entry.EntryId,
+                previewFullPath,
+                description,
                 entry.CapturedAt,
                 entry.CapturedAtTimeZoneId,
                 entry.CapturedAtOffsetMinutes,
