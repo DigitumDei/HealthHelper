@@ -139,8 +139,16 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
 
             if (unifiedResult is not null)
             {
-                await UpdateEntryClassificationAsync(entry, unifiedResult).ConfigureAwait(false);
-                ValidateUnifiedAnalysis(entry.EntryId, unifiedResult);
+                var detectedType = NormalizeEntryType(unifiedResult.EntryType);
+                if (string.IsNullOrWhiteSpace(detectedType))
+                {
+                    _logger.LogWarning("Unified analysis returned an unknown entry type for entry {EntryId}.", entry.EntryId);
+                }
+                else
+                {
+                    await UnifiedAnalysisApplier.ApplyAsync(entry, detectedType, _trackedEntryRepository, _logger).ConfigureAwait(false);
+                    ValidateUnifiedAnalysis(entry.EntryId, detectedType, unifiedResult);
+                }
             }
 
             if (existingAnalysis is null)
@@ -174,78 +182,8 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         }
     }
 
-    private async Task UpdateEntryClassificationAsync(TrackedEntry entry, UnifiedAnalysisResult unified)
+    private void ValidateUnifiedAnalysis(int entryId, string detectedType, UnifiedAnalysisResult unified)
     {
-        var detectedType = NormalizeEntryType(unified.EntryType);
-        if (string.IsNullOrWhiteSpace(detectedType))
-        {
-            _logger.LogWarning("Unified analysis returned an unknown entry type for entry {EntryId}.", entry.EntryId);
-            return;
-        }
-
-        var originalType = entry.EntryType;
-        var pendingPayload = entry.Payload as PendingEntryPayload;
-        var payloadConverted = false;
-
-        if (pendingPayload is not null)
-        {
-            var converted = ConvertPendingPayload(entry, pendingPayload, detectedType);
-            if (!ReferenceEquals(converted, pendingPayload))
-            {
-                entry.Payload = converted;
-                entry.DataSchemaVersion = 1;
-                payloadConverted = true;
-            }
-            else
-            {
-                entry.Payload = converted;
-                entry.DataSchemaVersion = 0;
-            }
-        }
-
-        var typeChanged = !string.Equals(originalType, detectedType, StringComparison.OrdinalIgnoreCase);
-        if (!typeChanged && !payloadConverted)
-        {
-            return;
-        }
-
-        entry.EntryType = detectedType;
-
-        await _trackedEntryRepository.UpdateAsync(entry).ConfigureAwait(false);
-        _logger.LogInformation(
-            "Updated entry {EntryId} classification to {EntryType} (payload={PayloadType}, schemaVersion={SchemaVersion}).",
-            entry.EntryId,
-            entry.EntryType,
-            entry.Payload.GetType().Name,
-            entry.DataSchemaVersion);
-    }
-
-    private IEntryPayload ConvertPendingPayload(TrackedEntry entry, PendingEntryPayload pendingPayload, string detectedType)
-    {
-        switch (detectedType)
-        {
-            case "Meal":
-                return new MealPayload
-                {
-                    Description = pendingPayload.Description,
-                    PreviewBlobPath = pendingPayload.PreviewBlobPath ?? entry.BlobPath
-                };
-            case "Exercise":
-                return new ExercisePayload
-                {
-                    Description = pendingPayload.Description,
-                    PreviewBlobPath = pendingPayload.PreviewBlobPath ?? entry.BlobPath,
-                    ScreenshotBlobPath = entry.BlobPath ?? pendingPayload.PreviewBlobPath
-                };
-            default:
-                // Sleep/Other remain with pending payload until dedicated payloads exist.
-                return pendingPayload;
-        }
-    }
-
-    private void ValidateUnifiedAnalysis(int entryId, UnifiedAnalysisResult unified)
-    {
-        var detectedType = NormalizeEntryType(unified.EntryType);
         switch (detectedType)
         {
             case "Meal":

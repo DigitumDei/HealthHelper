@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
     <PackageReference Include="xunit" Version="2.6.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.4">
       <PrivateAssets>all</PrivateAssets>
@@ -17,5 +18,18 @@
 
   <ItemGroup>
     <Compile Include="..\HealthHelper\Utilities\DateTimeConverter.cs" Link="Utilities\DateTimeConverter.cs" />
+    <Compile Include="..\HealthHelper\Models\TrackedEntry.cs" Link="Models\TrackedEntry.cs" />
+    <Compile Include="..\HealthHelper\Models\PendingEntryPayload.cs" Link="Models\PendingEntryPayload.cs" />
+    <Compile Include="..\HealthHelper\Models\MealPayload.cs" Link="Models\MealPayload.cs" />
+    <Compile Include="..\HealthHelper\Models\ExercisePayload.cs" Link="Models\ExercisePayload.cs" />
+    <Compile Include="..\HealthHelper\Models\IEntryPayload.cs" Link="Models\IEntryPayload.cs" />
+    <Compile Include="..\HealthHelper\Models\ProcessingStatus.cs" Link="Models\ProcessingStatus.cs" />
+    <Compile Include="..\HealthHelper\Models\UnifiedAnalysisResult.cs" Link="Models\UnifiedAnalysisResult.cs" />
+    <Compile Include="..\HealthHelper\Models\MealAnalysisResult.cs" Link="Models\MealAnalysisResult.cs" />
+    <Compile Include="..\HealthHelper\Models\ExerciseAnalysisResult.cs" Link="Models\ExerciseAnalysisResult.cs" />
+    <Compile Include="..\HealthHelper\Models\SleepAnalysisResult.cs" Link="Models\SleepAnalysisResult.cs" />
+    <Compile Include="..\HealthHelper\Models\OtherAnalysisResult.cs" Link="Models\OtherAnalysisResult.cs" />
+    <Compile Include="..\HealthHelper\Data\ITrackedEntryRepository.cs" Link="Data\ITrackedEntryRepository.cs" />
+    <Compile Include="..\HealthHelper\Services\Analysis\UnifiedAnalysisApplier.cs" Link="Services\Analysis\UnifiedAnalysisApplier.cs" />
   </ItemGroup>
 </Project>
