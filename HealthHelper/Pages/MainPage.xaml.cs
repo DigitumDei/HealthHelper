@@ -1,17 +1,9 @@
-using System;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using HealthHelper.Data;
 using HealthHelper.Models;
-using HealthHelper.PageModels;
 using HealthHelper.Services.Analysis;
 using HealthHelper.Services.Media;
 using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Media;
-using Microsoft.Maui.Storage;
 
 namespace HealthHelper.Pages;
 
@@ -447,4 +439,5 @@ public partial class MainPage : ContentPage
 #endif
         return true;
     }
+
 }
