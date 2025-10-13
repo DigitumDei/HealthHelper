@@ -6,6 +6,7 @@ using HealthHelper.Pages;
 using HealthHelper.Services.Analysis;
 using HealthHelper.Services.Logging;
 using HealthHelper.Services.Media;
+using HealthHelper.Services.Navigation;
 using HealthHelper.Services.Llm;
 using HealthHelper.Services.Share;
 using Microsoft.Maui.Storage;
@@ -67,9 +68,16 @@ public static class MauiProgram
         builder.Services.AddSingleton<IShareNavigationService, ShareNavigationService>();
         builder.Services.AddScoped<ISharedImageImportService, SharedImageImportService>();
 
+        builder.Services.AddSingleton<HistoricalNavigationContext>();
+        builder.Services.AddSingleton<IHistoricalNavigationService, HistoricalNavigationService>();
+
 
         builder.Services.AddTransient<EntryLogViewModel>();
         builder.Services.AddTransient<MainPage>();
+        builder.Services.AddTransient<WeekViewPage>();
+        builder.Services.AddTransient<MonthViewPage>();
+        builder.Services.AddTransient<YearViewPage>();
+        builder.Services.AddTransient<DayDetailPage>();
 
         builder.Services.AddTransient<SettingsViewModel>();
         builder.Services.AddTransient<SettingsPage>();
