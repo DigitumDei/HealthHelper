@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:pageModels="clr-namespace:HealthHelper.PageModels"
+             x:Class="HealthHelper.Pages.SleepDetailPage"
+             x:DataType="pageModels:SleepDetailViewModel"
+             Title="Sleep Details">
+    <ScrollView>
+        <VerticalStackLayout Spacing="16" Padding="24">
+            <Image Source="{Binding Sleep.PreviewPath}"
+                   Aspect="AspectFit"
+                   HeightRequest="300"
+                   SemanticProperties.Description="Sleep screenshot" />
+
+            <Label Text="Sleep entry"
+                   Style="{StaticResource Headline}" />
+            <Label Text="{Binding Sleep.Description}"
+                   Style="{StaticResource Body1}" />
+            <Label Text="{Binding Sleep.LocalCapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}"
+                   Style="{StaticResource Caption1}" />
+
+            <Label Text="Analysis"
+                   Style="{StaticResource Title2}"
+                   Margin="0,16,0,0" />
+            <Label Text="{Binding AnalysisText}"
+                   Style="{StaticResource Body1}" />
+
+            <Button Text="Delete"
+                    Command="{Binding DeleteCommand}"
+                    BackgroundColor="{StaticResource Error}"
+                    TextColor="{StaticResource OnError}"
+                    Margin="0,16,0,0" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

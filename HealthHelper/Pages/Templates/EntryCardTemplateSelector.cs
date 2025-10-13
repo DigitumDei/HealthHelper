@@ -7,6 +7,7 @@ public class EntryCardTemplateSelector : DataTemplateSelector
 {
     public DataTemplate? MealTemplate { get; set; }
     public DataTemplate? ExerciseTemplate { get; set; }
+    public DataTemplate? SleepTemplate { get; set; }
 
     protected override DataTemplate OnSelectTemplate(object item, BindableObject container)
     {
@@ -24,6 +25,12 @@ public class EntryCardTemplateSelector : DataTemplateSelector
                     throw new InvalidOperationException("ExerciseTemplate must be provided for EntryCardTemplateSelector.");
                 }
                 return ExerciseTemplate;
+            case SleepEntry:
+                if (SleepTemplate is null)
+                {
+                    throw new InvalidOperationException("SleepTemplate must be provided for EntryCardTemplateSelector.");
+                }
+                return SleepTemplate;
             default:
                 if (MealTemplate is not null)
                 {

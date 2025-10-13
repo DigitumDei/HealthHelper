@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Services.Analysis;
+using HealthHelper.Services.Navigation;
 using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
@@ -14,6 +15,7 @@ public partial class EntryLogViewModel : ObservableObject
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly ILogger<EntryLogViewModel> _logger;
+    private readonly IHistoricalNavigationService _historicalNavigationService;
     private readonly SemaphoreSlim _summaryCardLock = new(1, 1);
     public ObservableCollection<TrackedEntryCard> Entries { get; } = new();
 
@@ -28,10 +30,15 @@ public partial class EntryLogViewModel : ObservableObject
     public bool ShowGenerateSummaryButton => SummaryCard is null;
     public bool ShowSummaryCard => SummaryCard is not null;
 
-    public EntryLogViewModel(ITrackedEntryRepository trackedEntryRepository, IBackgroundAnalysisService backgroundAnalysisService, ILogger<EntryLogViewModel> logger)
+    public EntryLogViewModel(
+        ITrackedEntryRepository trackedEntryRepository,
+        IBackgroundAnalysisService backgroundAnalysisService,
+        IHistoricalNavigationService historicalNavigationService,
+        ILogger<EntryLogViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
+        _historicalNavigationService = historicalNavigationService;
         _logger = logger;
     }
 
@@ -84,6 +91,17 @@ public partial class EntryLogViewModel : ObservableObject
                 return;
             }
 
+            if (entry is SleepEntry sleepEntry)
+            {
+                _logger.LogInformation("Navigating to sleep detail for entry {EntryId}.", sleepEntry.EntryId);
+                await Shell.Current.GoToAsync(nameof(SleepDetailPage),
+                    new Dictionary<string, object>
+                    {
+                        { "Sleep", sleepEntry }
+                    });
+                return;
+            }
+
             _logger.LogWarning("No detail page registered for entry type {EntryType}.", entry.EntryType);
             await Shell.Current.DisplayAlertAsync("Unsupported entry", "This entry type cannot be opened yet.", "OK");
         }
@@ -91,6 +109,19 @@ public partial class EntryLogViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to navigate to entry detail for entry {EntryId}.", entry.EntryId);
             await Shell.Current.DisplayAlertAsync("Navigation error", "Unable to open entry details right now.", "OK");
+        }
+    }
+
+    [RelayCommand]
+    private async Task SwipeToWeekAsync()
+    {
+        try
+        {
+            await _historicalNavigationService.NavigateToWeekAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to navigate to week view from swipe gesture.");
         }
     }
 
@@ -249,19 +280,25 @@ public partial class EntryLogViewModel : ObservableObject
             return;
         }
 
-        if (!SummaryCard.IsClickable)
+        var status = SummaryCard.ProcessingStatus;
+
+        if (SummaryCard.IsClickable || status is ProcessingStatus.Failed or ProcessingStatus.Skipped)
         {
-            await Shell.Current.DisplayAlertAsync(
-                "Summary Pending",
-                "Your daily summary is still processing. Please try again shortly.",
-                "OK");
+            await Shell.Current.GoToAsync(nameof(DailySummaryPage), new Dictionary<string, object>
+            {
+                { "SummaryEntryId", SummaryCard.EntryId }
+            });
             return;
         }
 
-        await Shell.Current.GoToAsync(nameof(DailySummaryPage), new Dictionary<string, object>
+        var (title, message) = status switch
         {
-            { "SummaryEntryId", SummaryCard.EntryId }
-        });
+            ProcessingStatus.Processing => ("Summary Processing", "Your daily summary is currently processing. Please try again shortly."),
+            ProcessingStatus.Pending => ("Summary Pending", "Your daily summary is queued and will resume shortly."),
+            _ => ("Summary Unavailable", "The daily summary is not ready yet. Please try again later.")
+        };
+
+        await Shell.Current.DisplayAlertAsync(title, message, "OK");
     }
 
     public async Task LoadEntriesAsync()
@@ -332,6 +369,10 @@ public partial class EntryLogViewModel : ObservableObject
 
             var mealEntries = entries
                 .Where(entry => entry.EntryType == EntryType.Meal)
+                .ToList();
+
+            var sleepEntries = entries
+                .Where(entry => entry.EntryType == EntryType.Sleep)
                 .ToList();
 
             var pendingEntries = entries
@@ -434,10 +475,15 @@ public partial class EntryLogViewModel : ObservableObject
                 })
                 .OfType<ExerciseEntry>();
 
+            var sleepCards = sleepEntries
+                .Select(CreateCardFromEntry)
+                .OfType<SleepEntry>();
+
             var combinedCards = pendingCards
                 .Cast<TrackedEntryCard>()
                 .Concat(mealCards)
                 .Concat(exerciseCards)
+                .Concat(sleepCards)
                 .OrderByDescending(card => card.CapturedAtUtc)
                 .ToList();
 
@@ -515,6 +561,39 @@ public partial class EntryLogViewModel : ObservableObject
                 screenshotFullPath,
                 exercisePayload.Description,
                 exercisePayload.ExerciseType,
+                entry.CapturedAt,
+                entry.CapturedAtTimeZoneId,
+                entry.CapturedAtOffsetMinutes,
+                entry.ProcessingStatus);
+        }
+
+        if (entry.EntryType == EntryType.Sleep)
+        {
+            string? previewRelativePath = null;
+            string? description = null;
+
+            switch (entry.Payload)
+            {
+                case PendingEntryPayload pendingSleepPayload:
+                    previewRelativePath = pendingSleepPayload.PreviewBlobPath ?? entry.BlobPath;
+                    description = pendingSleepPayload.Description;
+                    break;
+            }
+
+            previewRelativePath ??= entry.BlobPath;
+
+            if (string.IsNullOrWhiteSpace(previewRelativePath))
+            {
+                _logger.LogWarning("CreateCardFromEntry: Missing preview path for sleep entry {EntryId}.", entry.EntryId);
+                return null;
+            }
+
+            var previewFullPath = Path.Combine(FileSystem.AppDataDirectory, previewRelativePath);
+
+            return new SleepEntry(
+                entry.EntryId,
+                previewFullPath,
+                description,
                 entry.CapturedAt,
                 entry.CapturedAtTimeZoneId,
                 entry.CapturedAtOffsetMinutes,

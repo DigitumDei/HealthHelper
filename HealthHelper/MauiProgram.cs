@@ -84,6 +84,8 @@ public static class MauiProgram
 
         builder.Services.AddTransient<MealDetailViewModel>();
         builder.Services.AddTransient<MealDetailPage>();
+        builder.Services.AddTransient<SleepDetailViewModel>();
+        builder.Services.AddTransient<SleepDetailPage>();
 
         builder.Services.AddTransient<DailySummaryViewModel>();
         builder.Services.AddTransient<DailySummaryPage>();

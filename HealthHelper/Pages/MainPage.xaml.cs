@@ -1,7 +1,3 @@
-using System;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.PageModels;
@@ -11,9 +7,6 @@ using HealthHelper.Services.Media;
 using HealthHelper.Services.Navigation;
 using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Media;
-using Microsoft.Maui.Storage;
 
 namespace HealthHelper.Pages;
 
