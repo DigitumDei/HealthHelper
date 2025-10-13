@@ -1,7 +1,4 @@
-using System;
-using System.Threading.Tasks;
 using System.Windows.Input;
-using Microsoft.Maui.Controls;
 
 namespace HealthHelper.Utilities.Gestures;
 
@@ -61,6 +58,8 @@ public class HorizontalSwipeBehavior : Behavior<View>
     {
         base.OnAttachedTo(bindable);
 
+        bindable.BindingContextChanged += OnBindableBindingContextChanged;
+        BindingContext = bindable.BindingContext;
         _associatedView = bindable;
         _panGestureRecognizer = new PanGestureRecognizer();
         _panGestureRecognizer.PanUpdated += OnPanUpdated;
@@ -78,7 +77,9 @@ public class HorizontalSwipeBehavior : Behavior<View>
             _panGestureRecognizer = null;
         }
 
+        bindable.BindingContextChanged -= OnBindableBindingContextChanged;
         _associatedView = null;
+        BindingContext = null;
     }
 
     private void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
@@ -166,7 +167,15 @@ public class HorizontalSwipeBehavior : Behavior<View>
             return;
         }
 
-        await view.TranslateTo(0, 0, 120, Easing.SinOut).ConfigureAwait(false);
+        await view.TranslateToAsync(0, 0, 120, Easing.SinOut).ConfigureAwait(false);
         view.TranslationX = 0;
+    }
+
+    private void OnBindableBindingContextChanged(object? sender, EventArgs e)
+    {
+        if (sender is BindableObject bindable)
+        {
+            BindingContext = bindable.BindingContext;
+        }
     }
 }

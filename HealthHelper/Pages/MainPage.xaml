@@ -207,7 +207,7 @@
 
     <ScrollView>
         <ScrollView.Behaviors>
-            <gestures:HorizontalSwipeBehavior SwipeRightCommand="{Binding Source={x:Reference MainPageRoot}, Path=SwipeToWeekCommand}" />
+            <gestures:HorizontalSwipeBehavior SwipeRightCommand="{Binding SwipeToWeekCommand}" />
         </ScrollView.Behaviors>
         <VerticalStackLayout Spacing="24" Padding="24,32">
             <VerticalStackLayout Spacing="8">
