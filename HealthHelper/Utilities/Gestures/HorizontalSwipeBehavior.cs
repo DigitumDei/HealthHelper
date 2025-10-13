@@ -1,7 +1,4 @@
-using System;
-using System.Threading.Tasks;
 using System.Windows.Input;
-using Microsoft.Maui.Controls;
 
 namespace HealthHelper.Utilities.Gestures;
 
@@ -20,6 +17,7 @@ public class HorizontalSwipeBehavior : Behavior<View>
         BindableProperty.Create(nameof(SwipeRightCommandParameter), typeof(object), typeof(HorizontalSwipeBehavior));
 
     private PanGestureRecognizer? _panGestureRecognizer;
+    private View? _associatedView;
     private bool _isHorizontalGesture;
     private double _totalX;
     private double _totalY;
@@ -60,6 +58,9 @@ public class HorizontalSwipeBehavior : Behavior<View>
     {
         base.OnAttachedTo(bindable);
 
+        bindable.BindingContextChanged += OnBindableBindingContextChanged;
+        BindingContext = bindable.BindingContext;
+        _associatedView = bindable;
         _panGestureRecognizer = new PanGestureRecognizer();
         _panGestureRecognizer.PanUpdated += OnPanUpdated;
         bindable.GestureRecognizers.Add(_panGestureRecognizer);
@@ -75,11 +76,15 @@ public class HorizontalSwipeBehavior : Behavior<View>
             bindable.GestureRecognizers.Remove(_panGestureRecognizer);
             _panGestureRecognizer = null;
         }
+
+        bindable.BindingContextChanged -= OnBindableBindingContextChanged;
+        _associatedView = null;
+        BindingContext = null;
     }
 
     private void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
     {
-        if (AssociatedObject is not View view)
+        if (_associatedView is not View view)
         {
             return;
         }
@@ -162,7 +167,15 @@ public class HorizontalSwipeBehavior : Behavior<View>
             return;
         }
 
-        await view.TranslateTo(0, 0, 120, Easing.SinOut).ConfigureAwait(false);
+        await view.TranslateToAsync(0, 0, 120, Easing.SinOut).ConfigureAwait(false);
         view.TranslationX = 0;
+    }
+
+    private void OnBindableBindingContextChanged(object? sender, EventArgs e)
+    {
+        if (sender is BindableObject bindable)
+        {
+            BindingContext = bindable.BindingContext;
+        }
     }
 }

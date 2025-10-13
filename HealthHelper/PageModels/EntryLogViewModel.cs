@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Services.Analysis;
+using HealthHelper.Services.Navigation;
 using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
@@ -14,6 +15,7 @@ public partial class EntryLogViewModel : ObservableObject
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly ILogger<EntryLogViewModel> _logger;
+    private readonly IHistoricalNavigationService _historicalNavigationService;
     private readonly SemaphoreSlim _summaryCardLock = new(1, 1);
     public ObservableCollection<TrackedEntryCard> Entries { get; } = new();
 
@@ -28,10 +30,15 @@ public partial class EntryLogViewModel : ObservableObject
     public bool ShowGenerateSummaryButton => SummaryCard is null;
     public bool ShowSummaryCard => SummaryCard is not null;
 
-    public EntryLogViewModel(ITrackedEntryRepository trackedEntryRepository, IBackgroundAnalysisService backgroundAnalysisService, ILogger<EntryLogViewModel> logger)
+    public EntryLogViewModel(
+        ITrackedEntryRepository trackedEntryRepository,
+        IBackgroundAnalysisService backgroundAnalysisService,
+        IHistoricalNavigationService historicalNavigationService,
+        ILogger<EntryLogViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
+        _historicalNavigationService = historicalNavigationService;
         _logger = logger;
     }
 
@@ -91,6 +98,19 @@ public partial class EntryLogViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to navigate to entry detail for entry {EntryId}.", entry.EntryId);
             await Shell.Current.DisplayAlertAsync("Navigation error", "Unable to open entry details right now.", "OK");
+        }
+    }
+
+    [RelayCommand]
+    private async Task SwipeToWeekAsync()
+    {
+        try
+        {
+            await _historicalNavigationService.NavigateToWeekAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to navigate to week view from swipe gesture.");
         }
     }
 
