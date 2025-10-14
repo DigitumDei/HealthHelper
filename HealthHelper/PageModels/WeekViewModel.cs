@@ -23,6 +23,7 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
     private readonly ILogger<WeekViewModel> _logger;
     private readonly TimeZoneInfo _displayTimeZone;
     private readonly DateTime _currentWeekStart;
+    private bool _hasLoadedOnce;
 
     public WeekViewModel(
         ITrackedEntryRepository trackedEntryRepository,
@@ -85,6 +86,16 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
         if (query.TryGetValue("WeekStart", out var parameter))
         {
             WeekStartDate = NormalizeToWeekStart(ParseDate(parameter));
+        }
+
+        TriggerInitialLoad();
+    }
+
+    public void TriggerInitialLoad()
+    {
+        if (_hasLoadedOnce || IsLoading)
+        {
+            return;
         }
 
         _ = LoadWeekAsync();
@@ -191,6 +202,7 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
             UpdateWeekContext();
 
             await LoadWeeklySummaryAsync(summaryList).ConfigureAwait(false);
+            _hasLoadedOnce = true;
         }
         catch (Exception ex)
         {

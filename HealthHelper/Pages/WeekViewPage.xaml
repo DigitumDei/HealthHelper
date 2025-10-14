@@ -16,93 +16,12 @@
     </ContentPage.Resources>
 
     <Grid Padding="16,24">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-
         <Grid.Behaviors>
             <gestures:HorizontalSwipeBehavior SwipeLeftCommand="{Binding SwipeLeftCommand}"
                                              SwipeRightCommand="{Binding SwipeRightCommand}" />
         </Grid.Behaviors>
 
-        <Border Grid.Row="0"
-                Padding="16"
-                StrokeThickness="1"
-                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                StrokeShape="RoundRectangle 16,16,16,16"
-                BackgroundColor="{AppThemeBinding Light={StaticResource Gray50}, Dark={StaticResource Gray900}}"
-                Margin="0,0,0,16">
-            <VerticalStackLayout Spacing="8">
-                <Grid ColumnDefinitions="Auto,*"
-                      VerticalOptions="Center">
-                    <ActivityIndicator Grid.Column="0"
-                                       IsRunning="{Binding IsWeeklySummaryLoading}"
-                                       IsVisible="{Binding IsWeeklySummaryLoading}"
-                                       Color="{StaticResource Primary}" />
-                    <Label Grid.Column="1"
-                           Text="Weekly Summary"
-                           Style="{StaticResource Body2Strong}"
-                           HorizontalOptions="End" />
-                </Grid>
-
-                <Label Text="{Binding WeeklySummary.Highlights}"
-                       Style="{StaticResource Body1}"
-                       LineBreakMode="WordWrap">
-                    <Label.Triggers>
-                        <DataTrigger TargetType="Label"
-                                     Binding="{Binding WeeklySummary}"
-                                     Value="{x:Null}">
-                            <Setter Property="IsVisible" Value="False" />
-                        </DataTrigger>
-                    </Label.Triggers>
-                </Label>
-
-                <Label Text="{Binding WeeklySummary.Recommendations}"
-                       Style="{StaticResource Caption1}"
-                       TextColor="{StaticResource Gray600}"
-                       LineBreakMode="WordWrap"
-                       Margin="0,4,0,0">
-                    <Label.Triggers>
-                        <DataTrigger TargetType="Label"
-                                     Binding="{Binding WeeklySummary.Recommendations}"
-                                     Value="{x:Null}">
-                            <Setter Property="IsVisible" Value="False" />
-                        </DataTrigger>
-                        <DataTrigger TargetType="Label"
-                                     Binding="{Binding WeeklySummary.Recommendations}"
-                                     Value="">
-                            <Setter Property="IsVisible" Value="False" />
-                        </DataTrigger>
-                    </Label.Triggers>
-                </Label>
-
-                <Label Text="{Binding WeeklySummaryMessage}"
-                       Style="{StaticResource Caption1}"
-                       TextColor="{StaticResource Error}" />
-            </VerticalStackLayout>
-        </Border>
-
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,16" VerticalOptions="Center">
-            <Button Text="◀"
-                    FontSize="16"
-                    Command="{Binding GoToPreviousWeekCommand}"
-                    SemanticProperties.Hint="View previous week" />
-            <Label Grid.Column="1"
-                   Text="{Binding WeekRangeDisplay}"
-                   Style="{StaticResource Body2Strong}"
-                   HorizontalTextAlignment="Center"
-                   VerticalOptions="Center" />
-            <Button Grid.Column="2"
-                    Text="▶"
-                    FontSize="16"
-                    Command="{Binding GoToNextWeekCommand}"
-                    IsEnabled="{Binding IsCurrentWeek, Converter={StaticResource InvertedBoolConverter}}"
-                    SemanticProperties.Hint="View next week" />
-        </Grid>
-
-        <RefreshView Grid.Row="2"
+        <RefreshView
                      Command="{Binding RefreshCommand}"
                      IsRefreshing="{Binding IsLoading}">
             <CollectionView ItemsSource="{Binding Days}"
@@ -111,11 +30,87 @@
                 <CollectionView.ItemsLayout>
                     <LinearItemsLayout Orientation="Vertical" ItemSpacing="12" />
                 </CollectionView.ItemsLayout>
+                <CollectionView.Header>
+                    <VerticalStackLayout Spacing="16" Margin="0,0,0,16">
+                        <Border Padding="16"
+                                StrokeThickness="1"
+                                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                                StrokeShape="RoundRectangle 16,16,16,16"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+                            <VerticalStackLayout Spacing="8">
+                                <Grid ColumnDefinitions="Auto,*"
+                                      VerticalOptions="Center">
+                                    <ActivityIndicator Grid.Column="0"
+                                                       IsRunning="{Binding IsWeeklySummaryLoading}"
+                                                       IsVisible="{Binding IsWeeklySummaryLoading}"
+                                                       Color="{StaticResource Primary}" />
+                                    <Label Grid.Column="1"
+                                           Text="Weekly Summary"
+                                           Style="{StaticResource Body2Strong}"
+                                           HorizontalOptions="End" />
+                                </Grid>
+
+                                <Label Text="{Binding WeeklySummary.Highlights}"
+                                       Style="{StaticResource Body1}"
+                                       LineBreakMode="WordWrap">
+                                    <Label.Triggers>
+                                        <DataTrigger TargetType="Label"
+                                                     Binding="{Binding WeeklySummary}"
+                                                     Value="{x:Null}">
+                                            <Setter Property="IsVisible" Value="False" />
+                                        </DataTrigger>
+                                    </Label.Triggers>
+                                </Label>
+
+                                <Label Text="{Binding WeeklySummary.Recommendations}"
+                                       Style="{StaticResource Caption1}"
+                                       TextColor="{StaticResource Gray600}"
+                                       LineBreakMode="WordWrap"
+                                       Margin="0,4,0,0">
+                                    <Label.Triggers>
+                                        <DataTrigger TargetType="Label"
+                                                     Binding="{Binding WeeklySummary.Recommendations}"
+                                                     Value="{x:Null}">
+                                            <Setter Property="IsVisible" Value="False" />
+                                        </DataTrigger>
+                                        <DataTrigger TargetType="Label"
+                                                     Binding="{Binding WeeklySummary.Recommendations}"
+                                                     Value="">
+                                            <Setter Property="IsVisible" Value="False" />
+                                        </DataTrigger>
+                                    </Label.Triggers>
+                                </Label>
+
+                                <Label Text="{Binding WeeklySummaryMessage}"
+                                       Style="{StaticResource Caption1}"
+                                       TextColor="{StaticResource Error}" />
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Grid ColumnDefinitions="Auto,*,Auto" VerticalOptions="Center">
+                            <Button Text="◀"
+                                    FontSize="16"
+                                    Command="{Binding GoToPreviousWeekCommand}"
+                                    SemanticProperties.Hint="View previous week" />
+                            <Label Grid.Column="1"
+                                   Text="{Binding WeekRangeDisplay}"
+                                   Style="{StaticResource Body2Strong}"
+                                   HorizontalTextAlignment="Center"
+                                   VerticalOptions="Center" />
+                            <Button Grid.Column="2"
+                                    Text="▶"
+                                    FontSize="16"
+                                    Command="{Binding GoToNextWeekCommand}"
+                                    IsEnabled="{Binding IsCurrentWeek, Converter={StaticResource InvertedBoolConverter}}"
+                                    SemanticProperties.Hint="View next week" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </CollectionView.Header>
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="pageModels:WeekDayView">
                         <Border StrokeThickness="1"
                                 Padding="16"
-                                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                                 StrokeShape="RoundRectangle 12,12,12,12"
                                 BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray850}}">
                             <Border.Triggers>
