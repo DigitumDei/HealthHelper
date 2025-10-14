@@ -190,6 +190,11 @@ public class DailySummaryServiceTests
             return Task.FromResult(_entries.FirstOrDefault(e => e.EntryId == entryId));
         }
 
+        public Task<IReadOnlyList<DaySummary>> GetDaySummariesForWeekAsync(DateTime weekStart, TimeZoneInfo? timeZone = null)
+        {
+            return Task.FromResult<IReadOnlyList<DaySummary>>(Array.Empty<DaySummary>());
+        }
+
         public Task UpdateAsync(TrackedEntry entry)
         {
             return Task.CompletedTask;

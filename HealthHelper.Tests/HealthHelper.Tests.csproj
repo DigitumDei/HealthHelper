@@ -9,7 +9,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.9" />
     <PackageReference Include="xunit" Version="2.6.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.4">
       <PrivateAssets>all</PrivateAssets>
@@ -33,16 +34,22 @@
     <Compile Include="..\HealthHelper\Models\OtherAnalysisResult.cs" Link="Models\OtherAnalysisResult.cs" />
     <Compile Include="..\HealthHelper\Models\LlmProvider.cs" Link="Models\LlmProvider.cs" />
     <Compile Include="..\HealthHelper\Models\AppSettings.cs" Link="Models\AppSettings.cs" />
+    <Compile Include="..\HealthHelper\Models\DailySummary.cs" Link="Models\DailySummary.cs" />
+    <Compile Include="..\HealthHelper\Models\DailySummaryEntryAnalyses.cs" Link="Models\DailySummaryEntryAnalyses.cs" />
     <Compile Include="..\HealthHelper\Models\EntryAnalysis.cs" Link="Models\EntryAnalysis.cs" />
     <Compile Include="..\HealthHelper\Models\DailySummaryPayload.cs" Link="Models\DailySummaryPayload.cs" />
     <Compile Include="..\HealthHelper\Models\DailySummaryRequest.cs" Link="Models\DailySummaryRequest.cs" />
     <Compile Include="..\HealthHelper\Models\DailySummaryResult.cs" Link="Models\DailySummaryResult.cs" />
+    <Compile Include="..\HealthHelper\Models\DaySummary.cs" Link="Models\DaySummary.cs" />
     <Compile Include="..\HealthHelper\Data\ITrackedEntryRepository.cs" Link="Data\ITrackedEntryRepository.cs" />
     <Compile Include="..\HealthHelper\Data\IEntryAnalysisRepository.cs" Link="Data\IEntryAnalysisRepository.cs" />
+    <Compile Include="..\HealthHelper\Data\SqliteTrackedEntryRepository.cs" Link="Data\SqliteTrackedEntryRepository.cs" />
+    <Compile Include="..\HealthHelper\Data\HealthHelperDbContext.cs" Link="Data\HealthHelperDbContext.cs" />
     <Compile Include="..\HealthHelper\Data\IAppSettingsRepository.cs" Link="Data\IAppSettingsRepository.cs" />
     <Compile Include="..\HealthHelper\Services\Analysis\UnifiedAnalysisApplier.cs" Link="Services\Analysis\UnifiedAnalysisApplier.cs" />
     <Compile Include="..\HealthHelper\Services\Analysis\AnalysisInvocationResult.cs" Link="Services\Analysis\AnalysisInvocationResult.cs" />
     <Compile Include="..\HealthHelper\Services\Analysis\DailySummaryService.cs" Link="Services\Analysis\DailySummaryService.cs" />
+    <Compile Include="..\HealthHelper\Services\Analysis\WeekSummaryBuilder.cs" Link="Services\Analysis\WeekSummaryBuilder.cs" />
     <Compile Include="..\HealthHelper\Services\Llm\ILLmClient.cs" Link="Services\Llm\ILLmClient.cs" />
   </ItemGroup>
 </Project>

@@ -1,9 +1,12 @@
+using HealthHelper.PageModels;
+
 namespace HealthHelper.Pages;
 
 public partial class WeekViewPage : ContentPage
 {
-    public WeekViewPage()
+    public WeekViewPage(WeekViewModel viewModel)
     {
         InitializeComponent();
+        BindingContext = viewModel;
     }
 }

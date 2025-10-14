@@ -1,15 +1,216 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:pageModels="clr-namespace:HealthHelper.PageModels"
+             xmlns:gestures="clr-namespace:HealthHelper.Utilities.Gestures"
+             xmlns:converters="clr-namespace:HealthHelper.Converters"
              x:Class="HealthHelper.Pages.WeekViewPage"
+             x:Name="WeekViewPageRoot"
+             x:DataType="pageModels:WeekViewModel"
              Title="Week Overview">
-    <Grid Padding="24">
-        <VerticalStackLayout Spacing="16" HorizontalOptions="Center" VerticalOptions="Center">
-            <Label Text="Week view"
-                   Style="{StaticResource Headline}" />
-            <Label Text="Historical week analysis coming soon."
-                   Style="{StaticResource Body1}"
-                   HorizontalTextAlignment="Center" />
-        </VerticalStackLayout>
+
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <converters:InvertedBoolConverter x:Key="InvertedBoolConverter" />
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <Grid Padding="16,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid.Behaviors>
+            <gestures:HorizontalSwipeBehavior SwipeLeftCommand="{Binding SwipeLeftCommand}"
+                                             SwipeRightCommand="{Binding SwipeRightCommand}" />
+        </Grid.Behaviors>
+
+        <Border Grid.Row="0"
+                Padding="16"
+                StrokeThickness="1"
+                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                StrokeShape="RoundRectangle 16,16,16,16"
+                BackgroundColor="{AppThemeBinding Light={StaticResource Gray50}, Dark={StaticResource Gray900}}"
+                Margin="0,0,0,16">
+            <VerticalStackLayout Spacing="8">
+                <Grid ColumnDefinitions="Auto,*"
+                      VerticalOptions="Center">
+                    <ActivityIndicator Grid.Column="0"
+                                       IsRunning="{Binding IsWeeklySummaryLoading}"
+                                       IsVisible="{Binding IsWeeklySummaryLoading}"
+                                       Color="{StaticResource Primary}" />
+                    <Label Grid.Column="1"
+                           Text="Weekly Summary"
+                           Style="{StaticResource Body2Strong}"
+                           HorizontalOptions="End" />
+                </Grid>
+
+                <Label Text="{Binding WeeklySummary.Highlights}"
+                       Style="{StaticResource Body1}"
+                       LineBreakMode="WordWrap">
+                    <Label.Triggers>
+                        <DataTrigger TargetType="Label"
+                                     Binding="{Binding WeeklySummary}"
+                                     Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+
+                <Label Text="{Binding WeeklySummary.Recommendations}"
+                       Style="{StaticResource Caption1}"
+                       TextColor="{StaticResource Gray600}"
+                       LineBreakMode="WordWrap"
+                       Margin="0,4,0,0">
+                    <Label.Triggers>
+                        <DataTrigger TargetType="Label"
+                                     Binding="{Binding WeeklySummary.Recommendations}"
+                                     Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                        <DataTrigger TargetType="Label"
+                                     Binding="{Binding WeeklySummary.Recommendations}"
+                                     Value="">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+
+                <Label Text="{Binding WeeklySummaryMessage}"
+                       Style="{StaticResource Caption1}"
+                       TextColor="{StaticResource Error}" />
+            </VerticalStackLayout>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,16" VerticalOptions="Center">
+            <Button Text="◀"
+                    FontSize="16"
+                    Command="{Binding GoToPreviousWeekCommand}"
+                    SemanticProperties.Hint="View previous week" />
+            <Label Grid.Column="1"
+                   Text="{Binding WeekRangeDisplay}"
+                   Style="{StaticResource Body2Strong}"
+                   HorizontalTextAlignment="Center"
+                   VerticalOptions="Center" />
+            <Button Grid.Column="2"
+                    Text="▶"
+                    FontSize="16"
+                    Command="{Binding GoToNextWeekCommand}"
+                    IsEnabled="{Binding IsCurrentWeek, Converter={StaticResource InvertedBoolConverter}}"
+                    SemanticProperties.Hint="View next week" />
+        </Grid>
+
+        <RefreshView Grid.Row="2"
+                     Command="{Binding RefreshCommand}"
+                     IsRefreshing="{Binding IsLoading}">
+            <CollectionView ItemsSource="{Binding Days}"
+                            SelectionMode="None"
+                            VerticalOptions="FillAndExpand">
+                <CollectionView.ItemsLayout>
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="12" />
+                </CollectionView.ItemsLayout>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="pageModels:WeekDayView">
+                        <Border StrokeThickness="1"
+                                Padding="16"
+                                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                StrokeShape="RoundRectangle 12,12,12,12"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray850}}">
+                            <Border.Triggers>
+                                <DataTrigger TargetType="Border"
+                                             Binding="{Binding IsToday}"
+                                             Value="True">
+                                    <Setter Property="Stroke" Value="{StaticResource Primary}" />
+                                    <Setter Property="StrokeThickness" Value="2" />
+                                </DataTrigger>
+                            </Border.Triggers>
+
+                            <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+                                <Grid Grid.ColumnSpan="2" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                                    <Label Grid.Column="0"
+                                           Text="{Binding DayLabel}"
+                                           Style="{StaticResource Body2Strong}" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding DateLabel}"
+                                           Style="{StaticResource Caption1}"
+                                           TextColor="{StaticResource Gray600}"
+                                           VerticalOptions="Center" />
+                                    <Label Grid.Column="2"
+                                           Text="{Binding TotalCount, StringFormat='{}{0} entries'}"
+                                           Style="{StaticResource Caption1}"
+                                           HorizontalTextAlignment="End"
+                                           VerticalOptions="Center"
+                                           TextColor="{StaticResource Gray600}" />
+                                </Grid>
+
+                                <HorizontalStackLayout Grid.Row="1"
+                                                       Grid.ColumnSpan="2"
+                                                       Spacing="12"
+                                                       Margin="0,6,0,0">
+                                    <HorizontalStackLayout Spacing="4">
+                                        <Label Text="🍽️" />
+                                        <Label Text="{Binding MealCount}" />
+                                    </HorizontalStackLayout>
+                                    <HorizontalStackLayout Spacing="4">
+                                        <Label Text="💪" />
+                                        <Label Text="{Binding ExerciseCount}" />
+                                    </HorizontalStackLayout>
+                                    <HorizontalStackLayout Spacing="4">
+                                        <Label Text="😴" />
+                                        <Label Text="{Binding SleepCount}" />
+                                    </HorizontalStackLayout>
+                                    <HorizontalStackLayout Spacing="4">
+                                        <Label Text="⚙️" />
+                                        <Label Text="{Binding OtherCount}" />
+                                    </HorizontalStackLayout>
+                                    <HorizontalStackLayout Spacing="4">
+                                        <Label Text="⏳" />
+                                        <Label Text="{Binding PendingCount}" />
+                                    </HorizontalStackLayout>
+                                </HorizontalStackLayout>
+
+                                <FlexLayout Grid.Row="2"
+                                            Grid.ColumnSpan="2"
+                                            Margin="0,8,0,0"
+                                            BindableLayout.ItemsSource="{Binding PreviewImagePaths}"
+                                            Wrap="NoWrap"
+                                            AlignItems="Center"
+                                            JustifyContent="Start">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="0"
+                                                    StrokeThickness="0"
+                                                    WidthRequest="52"
+                                                    HeightRequest="52"
+                                                    Margin="0,0,8,0"
+                                                    StrokeShape="RoundRectangle 8,8,8,8">
+                                                <Image Source="{Binding .}"
+                                                       Aspect="AspectFill"
+                                                       WidthRequest="52"
+                                                       HeightRequest="52" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </FlexLayout>
+
+                                <Label Grid.Row="3"
+                                       Grid.ColumnSpan="2"
+                                       Text="{Binding SummaryStatusText}"
+                                       Style="{StaticResource Caption1}"
+                                       TextColor="{StaticResource Gray600}"
+                                       Margin="0,8,0,0" />
+                            </Grid>
+
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding BindingContext.SelectDayCommand, Source={x:Reference WeekViewPageRoot}}"
+                                                      CommandParameter="{Binding .}" />
+                            </Border.GestureRecognizers>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
     </Grid>
 </ContentPage>

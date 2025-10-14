@@ -73,6 +73,7 @@ public static class MauiProgram
 
 
         builder.Services.AddTransient<EntryLogViewModel>();
+        builder.Services.AddTransient<WeekViewModel>();
         builder.Services.AddTransient<MainPage>();
         builder.Services.AddTransient<WeekViewPage>();
         builder.Services.AddTransient<MonthViewPage>();
@@ -98,6 +99,7 @@ public static class MauiProgram
         builder.Services.AddTransient<IDailySummaryService, DailySummaryService>();
         builder.Services.AddTransient<ILLmClient, OpenAiLlmClient>();
         builder.Services.AddSingleton<MealAnalysisValidator>();
+        builder.Services.AddTransient<WeekSummaryBuilder>();
 
         var app = builder.Build();
 
