@@ -20,9 +20,21 @@
 - Run `dotnet format` before publishing changes to satisfy analyzers and nullable warnings.
 
 ## Testing Guidelines
-- Place unit tests in the future `HealthHelper.Tests/` project, mirroring production namespaces.
+- Place unit tests in the `HealthHelper.Tests/` project, mirroring production namespaces.
 - Name test classes `<TypeUnderTest>Tests` and methods with scenario-driven verbs (e.g., `GeneratePlan_SortsTasksByUrgency`).
 - Mock AI integrations so `dotnet test` remains deterministic and offline-friendly.
+
+### Code Coverage
+- Run tests with code coverage using: `dotnet test HealthHelper.Tests/HealthHelper.Tests.csproj /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=./TestResults/ /p:IncludeTestAssembly=true`
+- This generates a coverage report at `HealthHelper.Tests/TestResults/coverage.cobertura.xml`
+- Note: The test project uses linked source files rather than project references, requiring `/p:IncludeTestAssembly=true` to measure coverage properly.
+- Generate human-readable HTML reports with ReportGenerator:
+  ```bash
+  dotnet tool install --global dotnet-reportgenerator-globaltool
+  reportgenerator -reports:"HealthHelper.Tests/TestResults/coverage.cobertura.xml" -targetdir:"HealthHelper.Tests/TestResults/coverage-report" -reporttypes:"Html;TextSummary"
+  ```
+- View the text summary at `HealthHelper.Tests/TestResults/coverage-report/Summary.txt` or open the HTML report in a browser.
+- Target minimum coverage thresholds: 80% line coverage, 70% branch coverage for production code.
 
 ## Security & Configuration
 - Store user-provided LLM keys with `SecureStorage` or platform keystores—never in plaintext files.
