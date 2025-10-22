@@ -93,8 +93,26 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
 
     public void TriggerInitialLoad()
     {
-        if (_hasLoadedOnce || IsLoading)
+        var shouldReload = RestoreWeekSelectionFromContext();
+
+        if (_hasLoadedOnce)
         {
+            if (shouldReload && !IsLoading)
+            {
+                _ = LoadWeekAsync();
+            }
+
+            return;
+        }
+
+        if (IsLoading)
+        {
+            return;
+        }
+
+        if (shouldReload)
+        {
+            _ = LoadWeekAsync();
             return;
         }
 
@@ -275,6 +293,48 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
         _navigationContext.SetCurrent(HistoricalViewLevel.Week, WeekStartDate);
         IsDrilledDown = _navigationContext.PeekBreadcrumb()?.Level == HistoricalViewLevel.Month;
         WeekRangeDisplay = BuildWeekRangeLabel(WeekStartDate);
+    }
+
+    private bool RestoreWeekSelectionFromContext()
+    {
+        var requiresReload = false;
+
+        if (_navigationContext.CurrentLevel == HistoricalViewLevel.Day)
+        {
+            var breadcrumb = _navigationContext.PeekBreadcrumb();
+            if (breadcrumb?.Level == HistoricalViewLevel.Week)
+            {
+                _navigationContext.PopBreadcrumb();
+                var normalizedWeek = NormalizeToWeekStart(breadcrumb.Date);
+                requiresReload = NormalizeWeekSelection(normalizedWeek);
+                _navigationContext.SetCurrent(HistoricalViewLevel.Week, normalizedWeek);
+                IsDrilledDown = _navigationContext.PeekBreadcrumb()?.Level == HistoricalViewLevel.Month;
+                return requiresReload;
+            }
+        }
+
+        if (_navigationContext.CurrentLevel == HistoricalViewLevel.Week)
+        {
+            var normalizedWeek = NormalizeToWeekStart(_navigationContext.CurrentDate);
+            requiresReload = NormalizeWeekSelection(normalizedWeek);
+            _navigationContext.SetCurrent(HistoricalViewLevel.Week, normalizedWeek);
+            IsDrilledDown = _navigationContext.PeekBreadcrumb()?.Level == HistoricalViewLevel.Month;
+            return requiresReload;
+        }
+
+        IsDrilledDown = _navigationContext.PeekBreadcrumb()?.Level == HistoricalViewLevel.Month;
+        return requiresReload;
+    }
+
+    private bool NormalizeWeekSelection(DateTime normalizedWeek)
+    {
+        if (WeekStartDate == normalizedWeek)
+        {
+            return false;
+        }
+
+        WeekStartDate = normalizedWeek;
+        return true;
     }
 
     private static DateTime ParseDate(object value)
