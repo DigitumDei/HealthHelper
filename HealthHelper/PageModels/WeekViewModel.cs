@@ -23,6 +23,8 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
     private readonly ILogger<WeekViewModel> _logger;
     private readonly TimeZoneInfo _displayTimeZone;
     private readonly DateTime _currentWeekStart;
+    private DateTime? _lastLoadedWeekStart;
+    private DateTime? _requestedWeekStart;
     private bool _hasLoadedOnce;
 
     public WeekViewModel(
@@ -77,6 +79,7 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
     {
         WeekRangeDisplay = BuildWeekRangeLabel(value);
         GoToNextWeekCommand.NotifyCanExecuteChanged();
+        GoToCurrentWeekCommand.NotifyCanExecuteChanged();
     }
 
     public bool IsCurrentWeek => WeekStartDate == _currentWeekStart;
@@ -86,6 +89,11 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
         if (query.TryGetValue("WeekStart", out var parameter))
         {
             WeekStartDate = NormalizeToWeekStart(ParseDate(parameter));
+            _requestedWeekStart = WeekStartDate;
+        }
+        else
+        {
+            _requestedWeekStart = null;
         }
 
         TriggerInitialLoad();
@@ -94,10 +102,11 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
     public void TriggerInitialLoad()
     {
         var shouldReload = RestoreWeekSelectionFromContext();
+        var hasWeekChanged = !_lastLoadedWeekStart.HasValue || WeekStartDate != _lastLoadedWeekStart.Value;
 
         if (_hasLoadedOnce)
         {
-            if (shouldReload && !IsLoading)
+            if ((shouldReload || hasWeekChanged) && !IsLoading)
             {
                 _ = LoadWeekAsync();
             }
@@ -107,12 +116,6 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
 
         if (IsLoading)
         {
-            return;
-        }
-
-        if (shouldReload)
-        {
-            _ = LoadWeekAsync();
             return;
         }
 
@@ -158,6 +161,19 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
     }
 
     private bool CanNavigateToNextWeek() => WeekStartDate < _currentWeekStart;
+
+    [RelayCommand(CanExecute = nameof(CanGoToCurrentWeek))]
+    private async Task GoToCurrentWeekAsync()
+    {
+        if (WeekStartDate != _currentWeekStart)
+        {
+            WeekStartDate = _currentWeekStart;
+        }
+
+        await LoadWeekAsync().ConfigureAwait(false);
+    }
+
+    private bool CanGoToCurrentWeek() => !_hasLoadedOnce || WeekStartDate != _currentWeekStart;
 
     [RelayCommand]
     private async Task SwipeLeftAsync()
@@ -215,6 +231,7 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
                 Days.Add(day);
             }
 
+            _lastLoadedWeekStart = WeekStartDate;
             ShowEmptyState = Days.All(d => d.TotalCount == 0);
 
             UpdateWeekContext();
@@ -234,6 +251,7 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
         {
             IsLoading = false;
             GoToNextWeekCommand.NotifyCanExecuteChanged();
+            GoToCurrentWeekCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -311,6 +329,16 @@ public partial class WeekViewModel : ObservableObject, IQueryAttributable
                 IsDrilledDown = _navigationContext.PeekBreadcrumb()?.Level == HistoricalViewLevel.Month;
                 return requiresReload;
             }
+        }
+
+        if (_requestedWeekStart.HasValue)
+        {
+            var normalizedFromRequest = NormalizeToWeekStart(_requestedWeekStart.Value);
+            requiresReload = NormalizeWeekSelection(normalizedFromRequest);
+            _navigationContext.SetCurrent(HistoricalViewLevel.Week, normalizedFromRequest);
+            IsDrilledDown = _navigationContext.PeekBreadcrumb()?.Level == HistoricalViewLevel.Month;
+            _requestedWeekStart = null;
+            return requiresReload;
         }
 
         if (_navigationContext.CurrentLevel == HistoricalViewLevel.Week)
