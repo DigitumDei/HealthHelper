@@ -42,6 +42,7 @@
 - When adding caching or logs, redact prompts and health data by default and guard debugging hooks behind compilation symbols.
 
 ## Commit & Pull Request Guidelines
+- Never create commits or push branches until the requester has reviewed the changes and explicitly asked you to do so.
 - Write commits with short, imperative subjects (e.g., "Remove aspire") and include context when touching multiple layers.
 - Scope diffs narrowly and call out security implications of storage or AI changes in commit bodies or PR notes.
 - For PRs, provide a summary, linked issue, UI screenshots or recordings if applicable, per-platform manual test notes, and clarity on how sensitive data stays protected.
