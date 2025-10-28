@@ -87,7 +87,7 @@
                             </VerticalStackLayout>
                         </Border>
 
-                        <Grid ColumnDefinitions="Auto,*,Auto" VerticalOptions="Center">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" VerticalOptions="Center">
                             <Button Text="◀"
                                     FontSize="16"
                                     Command="{Binding GoToPreviousWeekCommand}"
@@ -103,6 +103,13 @@
                                     Command="{Binding GoToNextWeekCommand}"
                                     IsEnabled="{Binding IsCurrentWeek, Converter={StaticResource InvertedBoolConverter}}"
                                     SemanticProperties.Hint="View next week" />
+                            <Button Grid.Column="3"
+                                    Margin="8,0,0,0"
+                                    Text="⏭"
+                                    FontSize="16"
+                                    Command="{Binding GoToCurrentWeekCommand}"
+                                    IsEnabled="{Binding IsCurrentWeek, Converter={StaticResource InvertedBoolConverter}}"
+                                    SemanticProperties.Hint="Jump to current week" />
                         </Grid>
                     </VerticalStackLayout>
                 </CollectionView.Header>
