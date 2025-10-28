@@ -9,6 +9,7 @@ using HealthHelper.Services.Media;
 using HealthHelper.Services.Navigation;
 using HealthHelper.Services.Llm;
 using HealthHelper.Services.Share;
+using HealthHelper.Services.Platform;
 using Microsoft.Maui.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -59,9 +60,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPhotoResizer, AndroidPhotoResizer>();
         builder.Services.AddSingleton<ICameraCaptureService, AndroidCameraCaptureService>();
         builder.Services.AddScoped<IShareIntentProcessor, ShareIntentProcessor>();
+        builder.Services.AddSingleton<IBackgroundExecutionService, HealthHelper.Platforms.Android.Services.AndroidBackgroundExecutionService>();
+#elif IOS
+        builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
+        builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
+        builder.Services.AddSingleton<IBackgroundExecutionService, HealthHelper.Platforms.iOS.Services.IOSBackgroundExecutionService>();
 #else
         builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
         builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
+        builder.Services.AddSingleton<IBackgroundExecutionService, NoOpBackgroundExecutionService>();
 #endif
 
         builder.Services.AddSingleton<ISharedImageDraftStore, InMemorySharedImageDraftStore>();

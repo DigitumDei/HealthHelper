@@ -21,7 +21,7 @@ public partial class MealDetailViewModel : ObservableObject
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
-    private readonly IAnalysisOrchestrator _analysisOrchestrator;
+    private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly ILogger<MealDetailViewModel> _logger;
 
     [ObservableProperty]
@@ -44,13 +44,33 @@ public partial class MealDetailViewModel : ObservableObject
     public MealDetailViewModel(
         ITrackedEntryRepository trackedEntryRepository,
         IEntryAnalysisRepository entryAnalysisRepository,
-        IAnalysisOrchestrator analysisOrchestrator,
+        IBackgroundAnalysisService backgroundAnalysisService,
         ILogger<MealDetailViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
         _entryAnalysisRepository = entryAnalysisRepository;
-        _analysisOrchestrator = analysisOrchestrator;
+        _backgroundAnalysisService = backgroundAnalysisService;
         _logger = logger;
+    }
+
+    public void SubscribeToStatusChanges()
+    {
+        _backgroundAnalysisService.StatusChanged += OnAnalysisStatusChanged;
+    }
+
+    public void UnsubscribeFromStatusChanges()
+    {
+        _backgroundAnalysisService.StatusChanged -= OnAnalysisStatusChanged;
+    }
+
+    private async void OnAnalysisStatusChanged(object? sender, EntryStatusChangedEventArgs e)
+    {
+        // Only reload if this is for the current meal and analysis completed
+        if (Meal != null && e.EntryId == Meal.EntryId && e.Status == ProcessingStatus.Completed)
+        {
+            _logger.LogInformation("Analysis completed for entry {EntryId}, reloading analysis.", e.EntryId);
+            await LoadAnalysisAsync().ConfigureAwait(false);
+        }
     }
 
     [RelayCommand]
@@ -225,23 +245,13 @@ public partial class MealDetailViewModel : ObservableObject
                 return;
             }
 
-            var result = await _analysisOrchestrator
-                .ProcessCorrectionAsync(trackedEntry, existingAnalysis, trimmedCorrection!)
-                .ConfigureAwait(false);
+            // Queue the correction for background processing
+            await _backgroundAnalysisService.QueueCorrectionAsync(Meal.EntryId, trimmedCorrection!).ConfigureAwait(false);
 
-            if (result.IsQueued)
-            {
-                _logger.LogInformation("Successfully applied correction for entry {EntryId}.", Meal.EntryId);
-                await LoadAnalysisAsync().ConfigureAwait(false);
-                await ShowAlertOnMainThreadAsync("Analysis updated", "Thanks! We've updated the analysis with your notes.");
-                IsCorrectionMode = false;
-                CorrectionText = string.Empty;
-            }
-            else
-            {
-                var message = result.UserMessage ?? "We couldn't update the analysis. Try again later.";
-                await ShowAlertOnMainThreadAsync("Update failed", message);
-            }
+            _logger.LogInformation("Successfully queued correction for entry {EntryId}.", Meal.EntryId);
+            await ShowAlertOnMainThreadAsync("Processing correction", "Thanks! We're updating the analysis with your feedback. This may take a few moments.");
+            IsCorrectionMode = false;
+            CorrectionText = string.Empty;
         }
         catch (Exception ex)
         {
