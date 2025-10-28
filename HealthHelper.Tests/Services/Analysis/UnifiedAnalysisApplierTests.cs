@@ -230,6 +230,7 @@ public class UnifiedAnalysisApplierTests
         public Task<IEnumerable<TrackedEntry>> GetByDayAsync(DateTime date, TimeZoneInfo? timeZone = null) => throw new NotImplementedException();
         public Task<IEnumerable<TrackedEntry>> GetByEntryTypeAndDayAsync(EntryType entryType, DateTime date, TimeZoneInfo? timeZone = null) => throw new NotImplementedException();
         public Task<TrackedEntry?> GetByIdAsync(int entryId) => throw new NotImplementedException();
+        public Task<IReadOnlyList<DaySummary>> GetDaySummariesForWeekAsync(DateTime weekStart, TimeZoneInfo? timeZone = null) => Task.FromResult<IReadOnlyList<DaySummary>>(Array.Empty<DaySummary>());
         public Task UpdateEntryTypeAsync(int entryId, EntryType entryType) => throw new NotImplementedException();
         public Task UpdateProcessingStatusAsync(int entryId, ProcessingStatus status) => throw new NotImplementedException();
         #endregion
