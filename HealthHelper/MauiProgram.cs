@@ -61,14 +61,17 @@ public static class MauiProgram
         builder.Services.AddSingleton<ICameraCaptureService, AndroidCameraCaptureService>();
         builder.Services.AddScoped<IShareIntentProcessor, ShareIntentProcessor>();
         builder.Services.AddSingleton<IBackgroundExecutionService, HealthHelper.Platforms.Android.Services.AndroidBackgroundExecutionService>();
+        builder.Services.AddSingleton<INotificationPermissionService, HealthHelper.Platforms.Android.Services.AndroidNotificationPermissionService>();
 #elif IOS
         builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
         builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
         builder.Services.AddSingleton<IBackgroundExecutionService, HealthHelper.Platforms.iOS.Services.IOSBackgroundExecutionService>();
+        builder.Services.AddSingleton<INotificationPermissionService, NoOpNotificationPermissionService>();
 #else
         builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
         builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
         builder.Services.AddSingleton<IBackgroundExecutionService, NoOpBackgroundExecutionService>();
+        builder.Services.AddSingleton<INotificationPermissionService, NoOpNotificationPermissionService>();
 #endif
 
         builder.Services.AddSingleton<ISharedImageDraftStore, InMemorySharedImageDraftStore>();

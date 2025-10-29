@@ -2,6 +2,7 @@ using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Services.Analysis;
 using HealthHelper.Services.Media;
+using HealthHelper.Services.Platform;
 using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 
@@ -11,6 +12,7 @@ public partial class MainPage : ContentPage
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
+    private readonly INotificationPermissionService _notificationPermissionService;
     private readonly ILogger<MainPage> _logger;
     private readonly IPhotoResizer _photoResizer;
     private readonly ICameraCaptureService _cameraCaptureService;
@@ -22,6 +24,7 @@ public partial class MainPage : ContentPage
         EntryLogViewModel viewModel,
         ITrackedEntryRepository trackedEntryRepository,
         IBackgroundAnalysisService backgroundAnalysisService,
+        INotificationPermissionService notificationPermissionService,
         ILogger<MainPage> logger,
         IPhotoResizer photoResizer,
         ICameraCaptureService cameraCaptureService,
@@ -31,6 +34,7 @@ public partial class MainPage : ContentPage
         BindingContext = viewModel;
         _trackedEntryRepository = trackedEntryRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
+        _notificationPermissionService = notificationPermissionService;
         _logger = logger;
         _photoResizer = photoResizer;
         _cameraCaptureService = cameraCaptureService;
@@ -294,11 +298,10 @@ public partial class MainPage : ContentPage
 
             try
             {
-#if ANDROID
                 // Request notification permission on first photo capture (Android 13+)
                 // This enables foreground service to keep analysis running when screen is locked
-                await EnsureNotificationPermissionsAsync();
-#endif
+                await _notificationPermissionService.EnsurePermissionAsync();
+
                 await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId);
                 _logger.LogInformation("FinalizePhotoCaptureAsync: Entry queued for background analysis");
             }
@@ -444,42 +447,5 @@ public partial class MainPage : ContentPage
 #endif
         return true;
     }
-
-#if ANDROID
-    private async Task EnsureNotificationPermissionsAsync()
-    {
-        // Only needed on Android 13+ (API 33+)
-        if (!OperatingSystem.IsAndroidVersionAtLeast(33))
-        {
-            return;
-        }
-
-        var notificationStatus = await Permissions.CheckStatusAsync<Platforms.Android.Permissions.PostNotificationsPermission>();
-        if (notificationStatus == PermissionStatus.Granted)
-        {
-            return;
-        }
-
-        // Show rationale explaining why we need this permission
-        if (Permissions.ShouldShowRationale<Platforms.Android.Permissions.PostNotificationsPermission>())
-        {
-            await MainThread.InvokeOnMainThreadAsync(async () =>
-            {
-                await DisplayAlertAsync(
-                    "Background Analysis",
-                    "We need notification permission to keep analyzing your photos even when the screen is locked. This ensures your meal analysis completes reliably.",
-                    "OK");
-            });
-        }
-
-        // Request the permission
-        notificationStatus = await Permissions.RequestAsync<Platforms.Android.Permissions.PostNotificationsPermission>();
-
-        if (notificationStatus != PermissionStatus.Granted)
-        {
-            _logger.LogWarning("POST_NOTIFICATIONS permission denied. Background analysis may be interrupted if screen locks.");
-        }
-    }
-#endif
 
 }
