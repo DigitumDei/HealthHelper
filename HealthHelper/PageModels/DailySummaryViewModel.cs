@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Services.Analysis;
+using HealthHelper.Services.Platform;
 using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
@@ -22,6 +23,7 @@ public partial class DailySummaryViewModel : ObservableObject
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
+    private readonly INotificationPermissionService _notificationPermissionService;
     private readonly ILogger<DailySummaryViewModel> _logger;
 
     [ObservableProperty]
@@ -62,11 +64,13 @@ public partial class DailySummaryViewModel : ObservableObject
         ITrackedEntryRepository trackedEntryRepository,
         IEntryAnalysisRepository entryAnalysisRepository,
         IBackgroundAnalysisService backgroundAnalysisService,
+        INotificationPermissionService notificationPermissionService,
         ILogger<DailySummaryViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
         _entryAnalysisRepository = entryAnalysisRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
+        _notificationPermissionService = notificationPermissionService;
         _logger = logger;
     }
 
@@ -272,6 +276,9 @@ public partial class DailySummaryViewModel : ObservableObject
                 ProcessingStatus = ProcessingStatus.Pending;
                 StatusMessage = "Regenerating summary...";
             });
+
+            // Request notification permission to ensure background execution works
+            await _notificationPermissionService.EnsurePermissionAsync();
 
             await _backgroundAnalysisService.QueueEntryAsync(entry.EntryId).ConfigureAwait(false);
 

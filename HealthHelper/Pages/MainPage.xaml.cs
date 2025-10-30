@@ -2,6 +2,7 @@ using HealthHelper.Data;
 using HealthHelper.Models;
 using HealthHelper.Services.Analysis;
 using HealthHelper.Services.Media;
+using HealthHelper.Services.Platform;
 using HealthHelper.Utilities;
 using Microsoft.Extensions.Logging;
 
@@ -11,6 +12,7 @@ public partial class MainPage : ContentPage
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
+    private readonly INotificationPermissionService _notificationPermissionService;
     private readonly ILogger<MainPage> _logger;
     private readonly IPhotoResizer _photoResizer;
     private readonly ICameraCaptureService _cameraCaptureService;
@@ -22,6 +24,7 @@ public partial class MainPage : ContentPage
         EntryLogViewModel viewModel,
         ITrackedEntryRepository trackedEntryRepository,
         IBackgroundAnalysisService backgroundAnalysisService,
+        INotificationPermissionService notificationPermissionService,
         ILogger<MainPage> logger,
         IPhotoResizer photoResizer,
         ICameraCaptureService cameraCaptureService,
@@ -31,6 +34,7 @@ public partial class MainPage : ContentPage
         BindingContext = viewModel;
         _trackedEntryRepository = trackedEntryRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
+        _notificationPermissionService = notificationPermissionService;
         _logger = logger;
         _photoResizer = photoResizer;
         _cameraCaptureService = cameraCaptureService;
@@ -294,6 +298,10 @@ public partial class MainPage : ContentPage
 
             try
             {
+                // Request notification permission on first photo capture (Android 13+)
+                // This enables foreground service to keep analysis running when screen is locked
+                await _notificationPermissionService.EnsurePermissionAsync();
+
                 await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId);
                 _logger.LogInformation("FinalizePhotoCaptureAsync: Entry queued for background analysis");
             }

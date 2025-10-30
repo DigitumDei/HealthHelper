@@ -45,7 +45,7 @@ public sealed class ShareIntentProcessor : IShareIntentProcessor
             return;
         }
 
-        var activity = Platform.CurrentActivity ?? throw new InvalidOperationException("No current activity available to handle share intent.");
+        var activity = Microsoft.Maui.ApplicationModel.Platform.CurrentActivity ?? throw new InvalidOperationException("No current activity available to handle share intent.");
         var resolver = activity.ContentResolver ?? throw new InvalidOperationException("Content resolver not available.");
 
         var sharedUri = GetShareUri(intent);
