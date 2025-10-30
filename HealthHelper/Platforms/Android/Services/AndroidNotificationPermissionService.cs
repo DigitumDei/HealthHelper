@@ -2,6 +2,7 @@
 using HealthHelper.Services.Platform;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Controls;
 
 namespace HealthHelper.Platforms.Android.Services;
 
@@ -36,10 +37,18 @@ public class AndroidNotificationPermissionService : INotificationPermissionServi
         {
             await MainThread.InvokeOnMainThreadAsync(async () =>
             {
-                await Shell.Current.DisplayAlertAsync(
-                    "Background Analysis",
-                    "We need notification permission to keep analyzing your photos even when the screen is locked. This ensures your meal analysis completes reliably.",
-                    "OK");
+                var page = Application.Current?.MainPage ?? Shell.Current?.CurrentPage;
+                if (page is not null)
+                {
+                    await page.DisplayAlert(
+                        "Background Analysis",
+                        "We need notification permission to keep analyzing your photos even when the screen is locked. This ensures your meal analysis completes reliably.",
+                        "OK");
+                }
+                else
+                {
+                    _logger.LogWarning("Unable to show notification permission rationale because no page is currently active.");
+                }
             });
         }
 
