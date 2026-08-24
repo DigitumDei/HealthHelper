@@ -22,7 +22,7 @@ import kotlinx.serialization.json.put
  *    paragraph, no paragraph merge occurs and the authored ranges stay exact.
  *
  * Block mapping:
- *  - Heading          -> a paragraph styled with `headingId = HEADING_n`.
+ *  - Heading          -> a paragraph styled with `namedStyleType = HEADING_n`.
  *  - Paragraph        -> a plain body paragraph (default style).
  *  - BulletList       -> contiguous `\n`-terminated paragraphs given a disc
  *    glyph by a single `createParagraphBullets` request over the whole run.
@@ -155,9 +155,9 @@ class GoogleDocsBatchBuilder {
                             buildJsonObject {
                                 put(
                                     "paragraphStyle",
-                                    buildJsonObject { put("headingId", "HEADING_$level") }
+                                    buildJsonObject { put("namedStyleType", "HEADING_$level") }
                                 )
-                                put("fields", "headingId")
+                                put("fields", "namedStyleType")
                                 put("range", range(start, end))
                             }
                         )
@@ -173,35 +173,35 @@ class GoogleDocsBatchBuilder {
                                     "paragraphStyle",
                                     buildJsonObject {
                                         put(
-                                            "borders",
+                                            "borderTop",
                                             buildJsonObject {
                                                 put(
-                                                    "top",
+                                                    "color",
                                                     buildJsonObject {
-                                                        put(
-                                                            "color",
-                                                            buildJsonObject {
-                                                                put("rgbColor", buildJsonObject {
-                                                                    put("red", 0.0)
-                                                                    put("green", 0.0)
-                                                                    put("blue", 0.0)
-                                                                })
-                                                            }
-                                                        )
-                                                        put("dashStyle", "SOLID")
-                                                        put("width", buildJsonObject {
-                                                            put("magnitude", 1.0)
-                                                            put("unit", "PT")
+                                                        put("color", buildJsonObject {
+                                                            put("rgbColor", buildJsonObject {
+                                                                put("red", 0.0)
+                                                                put("green", 0.0)
+                                                                put("blue", 0.0)
+                                                            })
                                                         })
-                                                        put("padding", 1.0)
                                                     }
                                                 )
+                                                put("dashStyle", "SOLID")
+                                                put("width", buildJsonObject {
+                                                    put("magnitude", 1.0)
+                                                    put("unit", "PT")
+                                                })
+                                                put("padding", buildJsonObject {
+                                                    put("magnitude", 1.0)
+                                                    put("unit", "PT")
+                                                })
                                             }
                                         )
-                                        put("fields", "borders.top")
-                                        put("range", range(start, end))
                                     }
                                 )
+                                put("fields", "borderTop")
+                                put("range", range(start, end))
                             }
                         )
                     }
@@ -230,7 +230,7 @@ class GoogleDocsBatchBuilder {
                     "createParagraphBullets",
                     buildJsonObject {
                         put("range", range(first.startIndex, last.endIndex))
-                        put("bulletPreset", "BULLET_DISC")
+                        put("bulletPreset", "BULLET_DISC_CIRCLE_SQUARE")
                     }
                 )
             }

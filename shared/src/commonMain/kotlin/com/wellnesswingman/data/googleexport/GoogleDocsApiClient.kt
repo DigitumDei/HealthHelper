@@ -10,6 +10,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -23,6 +24,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /**
@@ -45,6 +48,7 @@ class GoogleDocsApiClient(
         private const val DOCS_BASE_URL = "https://docs.googleapis.com/v1/documents"
         private const val DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
         private const val MAX_REQUESTS_PER_BATCH = 500
+        private const val MAX_ERROR_DETAIL_LENGTH = 500
 
         fun createDefaultHttpClient(): HttpClient = HttpClient {
             install(ContentNegotiation) {
@@ -148,10 +152,12 @@ class GoogleDocsApiClient(
         return if (response.status.isSuccess()) Result.success(Unit) else failure(response, "batchUpdate")
     }
 
-    private fun failure(
+    private suspend fun failure(
         response: HttpResponse,
         operation: String
-    ): Result<Nothing> = when {
+    ): Result<Nothing> {
+        val detail = response.googleErrorDetail()
+        return when {
         response.status == HttpStatusCode.Unauthorized -> {
             Napier.w("Google Docs $operation returned 401")
             Result.failure(GoogleDocsError.Unauthorized())
@@ -170,8 +176,29 @@ class GoogleDocsApiClient(
         }
         else -> {
             Napier.e("Google Docs $operation returned unexpected ${response.status.value}")
-            Result.failure(GoogleDocsError.InvalidResponse("unexpected status ${response.status.value}"))
+            Result.failure(GoogleDocsError.InvalidResponse(detail))
         }
+        }
+    }
+
+    /**
+     * Extracts the standard Google API validation message for local, user-facing
+     * troubleshooting. Request bodies and access tokens are never logged.
+     */
+    private suspend fun HttpResponse.googleErrorDetail(): String {
+        val message = runCatching {
+            Json.parseToJsonElement(bodyAsText())
+                .jsonObject["error"]
+                ?.jsonObject
+                ?.get("message")
+                ?.jsonPrimitive
+                ?.content
+        }.getOrNull()
+        return message
+            ?.replace(Regex("\\s+"), " ")
+            ?.take(MAX_ERROR_DETAIL_LENGTH)
+            ?.takeIf { it.isNotBlank() }
+            ?: "Google returned HTTP ${status.value}."
     }
 
     private fun failure(detail: String, operation: String = "request"): Result<Nothing> {

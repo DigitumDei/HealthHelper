@@ -133,7 +133,7 @@ sealed class GoogleExportError(
             is GoogleDocsError.ServerError -> "Google failed with a server error, please retry"
             is GoogleDocsError.Unauthorized -> "Google rejected the access token, please re-authorize"
             is GoogleDocsError.NetworkError -> "No network connection while reaching Google"
-            is GoogleDocsError.InvalidResponse -> "Google returned an unexpected response"
+            is GoogleDocsError.InvalidResponse -> "Google rejected the export request: ${failure.detail}"
             is GoogleDocsError.NotFound -> "The Google document no longer exists"
             is GoogleDocsError.Forbidden -> "Google refused access, please re-authorize"
         },

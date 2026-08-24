@@ -108,6 +108,32 @@ class GoogleDocsExportServiceTest {
     }
 
     @Test
+    fun `invalid Google request surfaces its validation message`() = runTest {
+        val client = createClient { request ->
+            when {
+                request.method == HttpMethod.Post && request.url.encodedPath == "/v1/documents" ->
+                    respond("""{"documentId":"doc-1"}""", HttpStatusCode.OK, jsonHeaders)
+                request.method == HttpMethod.Delete ->
+                    respond("", HttpStatusCode.OK)
+                else -> respond(
+                    """{"error":{"message":"Invalid requests[2].updateParagraphStyle field mask."}}""",
+                    HttpStatusCode.BadRequest,
+                    jsonHeaders
+                )
+            }
+        }
+
+        val result = service(client).createAndPopulate("token", "Report", document)
+
+        val failure = result.exceptionOrNull() as GoogleExportError.ApiFailure
+        assertIs<GoogleDocsError.InvalidResponse>(failure.failure)
+        assertEquals(
+            "Google rejected the export request: Invalid requests[2].updateParagraphStyle field mask.",
+            failure.toUserMessage()
+        )
+    }
+
+    @Test
     fun `failed cleanup reports the incomplete document`() = runTest {
         val client = createClient { request ->
             when {
