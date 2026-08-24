@@ -5,11 +5,13 @@ import com.russhwolf.settings.Settings
 import com.wellnesswingman.data.db.DriverFactory
 import com.wellnesswingman.domain.checkin.CheckInScheduling
 import com.wellnesswingman.domain.checkin.NoOpCheckInScheduling
+import com.wellnesswingman.domain.googleexport.GoogleAuthService
 import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.BackgroundExecutionService
 import com.wellnesswingman.platform.CameraCaptureOperations
 import com.wellnesswingman.platform.CameraCaptureService
 import com.wellnesswingman.platform.DesktopBackgroundExecutionService
+import com.wellnesswingman.platform.DesktopGoogleAuthService
 import com.wellnesswingman.platform.DiagnosticShare
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.FileSystemOperations
@@ -49,4 +51,7 @@ val platformModule = module {
 
     // Check-in scheduling (no alarms on desktop; answers are still capturable in-app)
     single<CheckInScheduling> { NoOpCheckInScheduling() }
+
+    // Google Docs export authorization (unavailable on desktop — UI shows unsupported state)
+    single<GoogleAuthService> { DesktopGoogleAuthService() }
 }

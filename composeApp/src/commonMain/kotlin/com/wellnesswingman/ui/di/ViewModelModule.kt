@@ -21,6 +21,7 @@ import com.wellnesswingman.ui.screens.settings.PolarSettingsViewModel
 import com.wellnesswingman.ui.screens.settings.SettingsViewModel
 import com.wellnesswingman.ui.screens.summary.DailySummaryViewModel
 import com.wellnesswingman.ui.screens.weighthistory.WeightHistoryViewModel
+import com.wellnesswingman.ui.screens.googleexport.GoogleDocsExportViewModel
 import org.koin.core.module.dsl.factoryOf
 import org.koin.dsl.module
 
@@ -74,6 +75,7 @@ val viewModelModule = module {
     factoryOf(::SettingsViewModel)
     factoryOf(::PolarSettingsViewModel)
     factoryOf(::WeightHistoryViewModel)
+    factoryOf(::GoogleDocsExportViewModel)
     factoryOf(::DailySummaryViewModel)
     factoryOf(::PhotoReviewViewModel)
     factoryOf(::NutritionalProfilesViewModel)

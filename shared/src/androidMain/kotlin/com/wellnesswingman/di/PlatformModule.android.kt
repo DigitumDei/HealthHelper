@@ -7,8 +7,10 @@ import androidx.security.crypto.MasterKeys
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.SharedPreferencesSettings
 import com.wellnesswingman.data.db.DriverFactory
+import com.wellnesswingman.domain.googleexport.GoogleAuthService
 import com.wellnesswingman.platform.AndroidBackgroundExecutionService
 import com.wellnesswingman.platform.AudioRecordingService
+import com.wellnesswingman.platform.AndroidGoogleAuthService
 import com.wellnesswingman.platform.BackgroundExecutionService
 import com.wellnesswingman.platform.CameraCaptureOperations
 import com.wellnesswingman.platform.CameraCaptureService
@@ -60,6 +62,9 @@ val platformModule = module {
 
     // Background execution service
     single<BackgroundExecutionService> { AndroidBackgroundExecutionService(get()) }
+
+    // Google Docs export authorization (Android-only)
+    single<GoogleAuthService> { AndroidGoogleAuthService(get<Context>()) }
 }
 
 private fun createEncryptedPrefs(context: Context): SharedPreferences {

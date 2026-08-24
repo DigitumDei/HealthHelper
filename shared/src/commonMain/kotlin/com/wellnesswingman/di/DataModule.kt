@@ -70,6 +70,10 @@ val dataModule = module {
     // Polar API
     single { PolarApiClient() }
 
+    // Google Docs export
+    single { com.wellnesswingman.data.googleexport.GoogleDocsApiClient() }
+    single { com.wellnesswingman.data.googleexport.GoogleDocsBatchBuilder() }
+
     // Settings - platform-specific implementation will be provided
     // via platformModule in each platform's source set
 }

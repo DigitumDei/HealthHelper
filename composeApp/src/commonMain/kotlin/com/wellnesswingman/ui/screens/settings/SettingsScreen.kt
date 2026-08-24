@@ -22,6 +22,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.ui.screens.nutrition.NutritionalProfilesScreen
+import com.wellnesswingman.ui.screens.googleexport.GoogleDocsExportScreen
 
 class SettingsScreen : Screen {
     @Composable
@@ -50,6 +51,13 @@ class SettingsScreen : Screen {
                     title = "User Profile",
                     subtitle = "Height, weight, DOB, activity level",
                     onClick = { navigator.push(UserProfileSettingsScreen()) }
+                )
+                HorizontalDivider()
+                SettingsMenuItem(
+                    icon = Icons.Default.FavoriteBorder,
+                    title = "Share health diary",
+                    subtitle = "Create a selective Google Doc for a clinician",
+                    onClick = { navigator.push(GoogleDocsExportScreen()) }
                 )
                 HorizontalDivider()
                 SettingsMenuItem(

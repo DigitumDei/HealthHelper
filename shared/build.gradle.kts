@@ -86,6 +86,7 @@ kotlin {
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.androidx.work.runtime)
                 implementation(libs.androidx.security.crypto)
+                implementation(libs.play.services.auth)
             }
         }
 

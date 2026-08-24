@@ -26,6 +26,7 @@ import com.wellnesswingman.domain.checkin.CheckInAnalysisService
 import com.wellnesswingman.domain.checkin.DayCheckInsProvider
 import com.wellnesswingman.domain.checkin.PendingCheckInStore
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
+import com.wellnesswingman.domain.report.HealthReportBuilder
 import com.wellnesswingman.domain.polar.PolarInsightService
 import com.wellnesswingman.domain.polar.PolarSyncOrchestrator
 import org.koin.core.module.dsl.bind
@@ -184,6 +185,30 @@ val domainModule = module {
             healthChatRepository = get(),
             llmClientFactory = get(),
             toolRegistry = get()
+        )
+    }
+
+    // Health report
+    single {
+        com.wellnesswingman.domain.report.HealthReportGatherer(
+            trackedEntryRepository = get(),
+            entryAnalysisRepository = get(),
+            dailySummaryRepository = get(),
+            weeklySummaryRepository = get(),
+            weightHistoryRepository = get(),
+            dailyCheckInRepository = get(),
+            checkInAnalysisRepository = get(),
+            polarSyncRepository = get(),
+            appSettingsRepository = get()
+        )
+    }
+    singleOf(::HealthReportBuilder)
+
+    // Google Docs export
+    single {
+        com.wellnesswingman.domain.googleexport.GoogleDocsExportService(
+            apiClient = get(),
+            batchBuilder = get()
         )
     }
 }

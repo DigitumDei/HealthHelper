@@ -23,6 +23,7 @@ androidx-lifecycle = "2.8.7"
 androidx-activity-compose = "1.8.2"
 androidx-security = "1.1.0-alpha06"
 androidx-browser = "1.8.0"
+play-services-auth = "21.2.0"
 
 [libraries]
 # Compose
@@ -73,6 +74,7 @@ kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 multiplatform-settings = { module = "com.russhwolf:multiplatform-settings", version.ref = "multiplatform-settings" }
 multiplatform-settings-no-arg = { module = "com.russhwolf:multiplatform-settings-no-arg", version.ref = "multiplatform-settings" }
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
 
 # Android specific
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
